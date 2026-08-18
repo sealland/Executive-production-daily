@@ -50,7 +50,6 @@ export function ProductionDetailTable({
               <th>Target</th>
               <th>Actual</th>
               <th>Ach%</th>
-              <th>Yield%</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -65,7 +64,6 @@ export function ProductionDetailTable({
                 <td>{formatTon(row.targetTon)}</td>
                 <td>{formatTon(row.actualTon)}</td>
                 <td>{formatPct(row.achievementPct)}</td>
-                <td>{formatPct(row.yieldPct)}</td>
                 <td>
                   <span className={`pill ${statusClass(row.status)}`}>{statusLabel(row.status)}</span>
                 </td>
