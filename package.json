@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:inspect": "node scripts/inspect-db.js",
-    "cpp:sync": "node scripts/sync-cpp-targets.js"
+    "cpp:sync": "node scripts/sync-cpp-targets.js",
+    "rm:sync": "node scripts/sync-rm-weight.js",
+    "downtime:sync": "node scripts/sync-downtime.js"
   },
   "dependencies": {
     "@tanstack/react-table": "^9.1.2",

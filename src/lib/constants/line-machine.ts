@@ -13,6 +13,8 @@ const PLANT_LEVEL_MACHINES: Record<string, string[]> = {
   SMD: ["MSM"]
 };
 
+const MMT_SUB_PLANTS = ["RMD7", "RMD8", "SMD"] as const;
+
 /** OCP line names carry the machine number: "ท่อดำ#1" → I1, "ตัวซี#5" → C5. */
 const OCP_NAME_PREFIXES: { match: RegExp; machinePrefix: string }[] = [
   { match: /ท่อดำ/, machinePrefix: "I" },
@@ -22,9 +24,21 @@ const OCP_NAME_PREFIXES: { match: RegExp; machinePrefix: string }[] = [
 /** Escape hatch for lines that follow neither rule. Key is "PLANT|LINE". */
 const EXPLICIT_MACHINES: Record<string, string[]> = {};
 
+function resolveForSubPlant(subPlant: string, lineName: string): string[] {
+  const explicit = EXPLICIT_MACHINES[`${subPlant}|${lineName}`];
+  if (explicit) return explicit;
+
+  if (PLANT_LEVEL_MACHINES[subPlant]) {
+    return PLANT_LEVEL_MACHINES[subPlant];
+  }
+
+  return [];
+}
+
 export function isPlantLevelDowntime(plant: string | undefined | null): boolean {
   const canonical = normalizePlant(plant);
   if (!canonical) return false;
+  if (canonical === "MMT") return true;
   return Boolean(PLANT_LEVEL_MACHINES[canonical]);
 }
 
@@ -54,6 +68,14 @@ export function resolveDowntimeMachines(
     }
   }
 
+  if (plantName === "MMT") {
+    for (const sub of MMT_SUB_PLANTS) {
+      const machines = resolveForSubPlant(sub, lineName);
+      if (machines.length) return machines;
+    }
+    return [];
+  }
+
   if (plantName && PLANT_LEVEL_MACHINES[plantName]) {
     return PLANT_LEVEL_MACHINES[plantName];
   }
@@ -70,7 +92,8 @@ export function downtimeScopeNote(
   if (!lineName) return null;
 
   if (isPlantLevelDowntime(plant)) {
-    return `Downtime ของ ${plant} บันทึกรวมทั้งโรงงาน ไม่ได้แยกตามไลน์ ตัวเลขจึงเป็นของทั้ง ${plant}`;
+    const label = normalizePlant(plant) || plant;
+    return `Downtime ของ ${label} บันทึกรวมทั้งโรงงาน ไม่ได้แยกตามไลน์ ตัวเลขจึงเป็นของทั้ง ${label}`;
   }
 
   if (!resolveDowntimeMachines(plant, lineName).length) {

@@ -161,6 +161,28 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
+export interface EmployeeInfo {
+  code: string;
+  name: string;
+  position: string | null;
+}
+
+export interface HighlightRecord {
+  reportDate: string;
+  plant: string;
+  text: string;
+  updatedBy: EmployeeInfo;
+  updatedAt: string;
+}
+
+export interface HighlightHistoryEntry {
+  reportDate: string;
+  plant: string;
+  text: string;
+  editedBy: EmployeeInfo;
+  editedAt: string;
+}
+
 export interface FilterOptions {
   plants: string[];
   lines: { plant: string; line: string }[];

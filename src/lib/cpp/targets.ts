@@ -1,16 +1,17 @@
 import fs from "fs";
 import path from "path";
-import { DASHBOARD_TO_CPP, normalizePlant } from "@/lib/constants/plants";
+import { cppSourcePlants } from "@/lib/constants/plants";
 
 /**
- * CPP plant codes in the Excel file → dashboard plant codes in CEO_REPORT.
+ * CPP Excel row codes → JSON storage keys (sheet สรุป).
  * Trend-N is trade volume, not factory production — excluded from production targets.
  */
-export const CPP_PLANT_TO_DASHBOARD: Record<string, string> = Object.fromEntries(
-  Object.entries(DASHBOARD_TO_CPP).map(([dashboard, cpp]) => [cpp, dashboard])
-);
-
-export const DASHBOARD_PLANT_TO_CPP = DASHBOARD_TO_CPP;
+export const CPP_PLANT_TO_DASHBOARD: Record<string, string> = {
+  OCP: "OCP",
+  MR7: "RMD7",
+  MR8: "RMD8",
+  MSM: "SMD"
+};
 
 export interface CppTargetBook {
   source: string;
@@ -182,9 +183,9 @@ export function loadCppTargets(): CppTargetBook | null {
 
 function selectedPlants(plantFilter?: string): string[] | null {
   if (!plantFilter) return null;
-  const plant = normalizePlant(plantFilter);
-  if (!plant || !DASHBOARD_TO_CPP[plant]) return [];
-  return [plant];
+  const sources = cppSourcePlants(plantFilter);
+  if (!sources.length) return [];
+  return sources;
 }
 
 /**

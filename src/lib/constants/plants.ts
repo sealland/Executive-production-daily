@@ -1,26 +1,29 @@
 /**
- * Canonical dashboard plant codes and aliases from other systems.
- * MSM (CPP / Downtime machine) = SMD (CEO_REPORT).
+ * Dashboard plant grouping:
+ * - OCP
+ * - MMT = RMD7 + RMD8 + SMD (and aliases MR7, MR8, MSM)
  */
-export const CANONICAL_PLANTS = ["OCP", "RMD7", "RMD8", "SMD"] as const;
+export const CANONICAL_PLANTS = ["OCP", "MMT"] as const;
+
+/** Raw CEO / Downtime codes folded into MMT. */
+export const MMT_SOURCE_PLANTS = ["RMD7", "RMD8", "SMD"] as const;
 
 /** Any known alias → canonical dashboard plant code. */
 export const PLANT_ALIASES: Record<string, string> = {
   OCP: "OCP",
-  RMD7: "RMD7",
-  MR7: "RMD7",
-  RMD8: "RMD8",
-  MR8: "RMD8",
-  SMD: "SMD",
-  MSM: "SMD"
+  MMT: "MMT",
+  RMD7: "MMT",
+  MR7: "MMT",
+  RMD8: "MMT",
+  MR8: "MMT",
+  SMD: "MMT",
+  MSM: "MMT"
 };
 
-/** Dashboard plant → CPP Excel row code (sheet สรุป). */
-export const DASHBOARD_TO_CPP: Record<string, string> = {
-  OCP: "OCP",
-  RMD7: "MR7",
-  RMD8: "MR8",
-  SMD: "MSM"
+/** CPP JSON keys (byPlantMonth) that roll up into each dashboard plant. */
+export const CPP_SOURCES_BY_PLANT: Record<string, string[]> = {
+  OCP: ["OCP"],
+  MMT: ["RMD7", "RMD8", "SMD"]
 };
 
 export function normalizePlant(plant: string | undefined | null): string | undefined {
@@ -29,22 +32,26 @@ export function normalizePlant(plant: string | undefined | null): string | undef
   return PLANT_ALIASES[key] || key;
 }
 
-/** SQL expression: derive plant from prd_plant and fold MSM → SMD. */
+export function cppSourcePlants(dashboardPlant: string | undefined | null): string[] {
+  const canonical = normalizePlant(dashboardPlant);
+  if (!canonical) return [];
+  return CPP_SOURCES_BY_PLANT[canonical] || [];
+}
+
+const PLANT_TOKEN = `
+  CASE
+    WHEN CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) > 0
+      THEN LEFT(LTRIM(RTRIM(prd_plant)), CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) - 1)
+    ELSE LTRIM(RTRIM(prd_plant))
+  END
+`;
+
+/** SQL expression: derive dashboard plant from prd_plant. */
 export const PLANT_EXPR = `
 CASE
-  WHEN UPPER(
-    CASE
-      WHEN CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) > 0
-        THEN LEFT(LTRIM(RTRIM(prd_plant)), CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) - 1)
-      ELSE LTRIM(RTRIM(prd_plant))
-    END
-  ) IN ('MSM', 'SMD') THEN 'SMD'
-  ELSE
-    CASE
-      WHEN CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) > 0
-        THEN LEFT(LTRIM(RTRIM(prd_plant)), CHARINDEX(' ', LTRIM(RTRIM(prd_plant))) - 1)
-      ELSE LTRIM(RTRIM(prd_plant))
-    END
+  WHEN UPPER(${PLANT_TOKEN}) = 'OCP' THEN 'OCP'
+  WHEN UPPER(${PLANT_TOKEN}) IN ('RMD7', 'MR7', 'RMD8', 'MR8', 'SMD', 'MSM') THEN 'MMT'
+  ELSE ${PLANT_TOKEN}
 END
 `;
 
@@ -52,6 +59,6 @@ END
 export function downtimeStationsForPlant(plant: string | undefined | null): string[] {
   const canonical = normalizePlant(plant);
   if (!canonical) return [];
-  if (canonical === "SMD") return ["SMD", "MSM"];
+  if (canonical === "MMT") return ["RMD7", "RMD8", "SMD", "MSM"];
   return [canonical];
 }

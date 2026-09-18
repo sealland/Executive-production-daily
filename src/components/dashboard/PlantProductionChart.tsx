@@ -33,7 +33,7 @@ function AchievementLabel(props: {
   const bw = Number(width);
   const bh = Number(height);
   const cy = by + bh / 2 + 4;
-  // Longest bars (often SMD) clip outside labels — render inside the bar instead.
+  // Longest bars (often MMT) clip outside labels — render inside the bar instead.
   const inside = bw >= 56;
   const cx = inside ? bx + bw - 6 : bx + bw + 6;
   const fill = inside ? "#ffffff" : n >= 100 ? "#15803d" : n >= 95 ? "#a16207" : "#b91c1c";
