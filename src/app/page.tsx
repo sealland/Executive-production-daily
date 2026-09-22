@@ -1,5 +1,5 @@
-import { ProductionDashboard } from "@/components/dashboard/ProductionDashboard";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <ProductionDashboard />;
+  redirect("/executive-report/index.html");
 }

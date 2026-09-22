@@ -8,7 +8,13 @@ const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins
+  allowedDevOrigins,
+  async rewrites() {
+    return [
+      { source: "/executive-report", destination: "/executive-report/index.html" },
+      { source: "/executive-report/", destination: "/executive-report/index.html" }
+    ];
+  }
 };
 
 export default nextConfig;

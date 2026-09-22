@@ -7,7 +7,7 @@ Dashboard สำหรับผู้บริหาร ติดตาม Produ
 1. ตั้งค่า `.env` (มีตัวอย่างใน `.env.example`)
 2. `npm install`
 3. `npm run dev`
-4. เปิด [http://localhost:3000](http://localhost:3000)
+4. เปิด [http://localhost:3010/executive-report/index.html](http://localhost:3010/executive-report/index.html)
 
 ## Scripts
 
