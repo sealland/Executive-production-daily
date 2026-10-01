@@ -774,7 +774,7 @@
       if (!el) return;
       el.classList.remove("saving", "err");
       if (!record) {
-        el.textContent = "ยังไม่มีการบันทึกจากระบบ (แสดงข้อความตัวอย่าง)";
+        el.textContent = "ยังไม่มีการบันทึกจากระบบ";
         return;
       }
       el.innerHTML = "แก้ไขล่าสุดโดย <span class=\"h-meta-name\">" + escapeHtml(record.updatedBy.name) + "</span>" +
@@ -792,7 +792,8 @@
             if (field) field.textContent = data.record.text;
             lastSaved[key] = data.record.text;
           } else if (field) {
-            lastSaved[key] = field.textContent.trim();
+            field.textContent = "";
+            lastSaved[key] = "";
           }
           lastSavedTime[key] = data.record ? data.record.occurredTime || "" : "";
           renderTime(key, lastSavedTime[key]);
