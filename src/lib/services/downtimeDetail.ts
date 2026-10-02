@@ -42,6 +42,52 @@ function mapCategory(group: string | null | undefined): ReportCategory {
   return CODE_MAP[group.trim().toUpperCase()] || "others";
 }
 
+export interface LongDowntimeEvent {
+  cause: string;
+  minutes: number;
+  startTime: string | null; // HH:MM
+}
+
+const PLANT_TO_STATION: Record<string, string> = { RMD7: "RMD7", RMD8: "RMD8", MSM: "SMD" };
+
+// Single downtime events longer than `minMinutes` for one plant on reportDate, longest first.
+// Used as the default plant highlight when nobody has written one yet.
+export async function getLongDowntimeEvents(
+  reportDate: string,
+  plant: string,
+  minMinutes = 120,
+  limit = 3
+): Promise<LongDowntimeEvent[]> {
+  const station = PLANT_TO_STATION[plant.toUpperCase()];
+  if (!station || !isDowntimeConfigured()) return [];
+
+  const pool = await getDowntimePool();
+  const table = getDowntimeTable();
+  const result = await pool
+    .request()
+    .input("d", sql.Date, reportDate)
+    .input("station", sql.NVarChar, station)
+    .input("minMinutes", sql.Int, minMinutes)
+    .input("limit", sql.Int, Math.min(Math.max(1, limit), 10))
+    .query(`
+      SELECT TOP (@limit)
+        ISNULL(NULLIF(LTRIM(RTRIM(Problem)), ''), ISNULL(Cause, N'ไม่ระบุ')) AS problem,
+        Minute AS minutes,
+        CONVERT(varchar(5), StartTime, 108) AS startTime
+      FROM ${table}
+      WHERE CONVERT(date, StartTime) = @d
+        AND LTRIM(RTRIM(Station)) = @station
+        AND Minute > @minMinutes
+      ORDER BY Minute DESC
+    `);
+
+  return (result.recordset as Array<{ problem: string; minutes: number; startTime: string | null }>).map((row) => ({
+    cause: row.problem,
+    minutes: Number(row.minutes || 0),
+    startTime: row.startTime
+  }));
+}
+
 export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDetailRow[]> {
   if (!isDowntimeConfigured()) return [];
 

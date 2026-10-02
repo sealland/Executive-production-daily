@@ -457,21 +457,21 @@
     loadDailySummary();
   })();
 
-  // ---------------- Equipment Down Time: paginated table + "View All" modal ----------------
+  // ---------------- Equipment Unservice: paginated table + "View All" modal ----------------
   (function () {
     var EQUIPMENT_DATA = [
-      { name: "Overhead Crane No.2",     plant: "RMD7", since: "10 Sep 2026", days: 5,  reason: "รออะไหล่ Bearing นำเข้าจากต่างประเทศ",         priority: "high",   eta: "ETA 20 Sep" },
-      { name: "Cooling Tower Pump #1",   plant: "MSM",  since: "3 Sep 2026",  days: 12, reason: "รอคิวทีมซ่อมบำรุงกลางเข้าดำเนินการ PM",           priority: "medium", eta: "ETA 18 Sep" },
-      { name: "Coiler Motor",            plant: "RMD8", since: "12 Sep 2026", days: 3,  reason: "รอผลตรวจสอบ (Inspection) ก่อนอนุมัติเดินเครื่อง", priority: "low",    eta: "ETA 17 Sep" },
-      { name: "Hydraulic Pump #3",       plant: "RMD7", since: "8 Sep 2026",  days: 7,  reason: "รออะไหล่ Seal Kit",                                priority: "medium", eta: "ETA 19 Sep" },
-      { name: "Ladle Crane #2",          plant: "MSM",  since: "14 Sep 2026", days: 1,  reason: "ตรวจสอบระบบไฟฟ้า",                                priority: "low",    eta: "ETA 16 Sep" },
-      { name: "Descaler Pump",           plant: "RMD8", since: "5 Sep 2026",  days: 10, reason: "รอทีมช่างจากผู้ผลิต",                             priority: "high",   eta: "ETA 21 Sep" },
-      { name: "Exhaust Fan #4",          plant: "MSM",  since: "11 Sep 2026", days: 4,  reason: "เปลี่ยนแบริ่งมอเตอร์",                            priority: "medium", eta: "ETA 18 Sep" },
-      { name: "Shear Blade Unit",        plant: "RMD7", since: "13 Sep 2026", days: 2,  reason: "รอใบมีดสำรอง",                                    priority: "low",    eta: "ETA 17 Sep" },
-      { name: "Walking Beam Furnace #2", plant: "MSM",  since: "2 Sep 2026",  days: 13, reason: "ซ่อมใหญ่ระบบเผาไหม้",                             priority: "high",   eta: "ETA 22 Sep" },
-      { name: "Roll Grinder",            plant: "RMD8", since: "9 Sep 2026",  days: 6,  reason: "รอโปรแกรม CNC อัปเดต",                            priority: "medium", eta: "ETA 19 Sep" },
-      { name: "Water Treatment Pump",    plant: "MSM",  since: "6 Sep 2026",  days: 9,  reason: "รออะไหล่ Impeller",                               priority: "high",   eta: "ETA 20 Sep" },
-      { name: "Billet Conveyor Motor",   plant: "RMD7", since: "15 Sep 2026", days: 1,  reason: "ตรวจสอบสายพาน",                                   priority: "low",    eta: "ETA 16 Sep" }
+      { name: "Overhead Crane No.2",     plant: "RMD7", status: "down", since: "10 Sep 2026", days: 5,  reason: "รออะไหล่ Bearing นำเข้าจากต่างประเทศ",         priority: "high",   eta: "ETA 20 Sep" },
+      { name: "Cooling Tower Pump #1",   plant: "MSM",  status: "degraded", since: "3 Sep 2026",  days: 12, reason: "รอคิวทีมซ่อมบำรุงกลางเข้าดำเนินการ PM",           priority: "medium", eta: "ETA 18 Sep" },
+      { name: "Coiler Motor",            plant: "RMD8", status: "degraded", since: "12 Sep 2026", days: 3,  reason: "รอผลตรวจสอบ (Inspection) ก่อนอนุมัติเดินเครื่อง", priority: "low",    eta: "ETA 17 Sep" },
+      { name: "Hydraulic Pump #3",       plant: "RMD7", status: "down", since: "8 Sep 2026",  days: 7,  reason: "รออะไหล่ Seal Kit",                                priority: "medium", eta: "ETA 19 Sep" },
+      { name: "Ladle Crane #2",          plant: "MSM",  status: "degraded", since: "14 Sep 2026", days: 1,  reason: "ตรวจสอบระบบไฟฟ้า",                                priority: "low",    eta: "ETA 16 Sep" },
+      { name: "Descaler Pump",           plant: "RMD8", status: "down", since: "5 Sep 2026",  days: 10, reason: "รอทีมช่างจากผู้ผลิต",                             priority: "high",   eta: "ETA 21 Sep" },
+      { name: "Exhaust Fan #4",          plant: "MSM",  status: "degraded", since: "11 Sep 2026", days: 4,  reason: "เปลี่ยนแบริ่งมอเตอร์",                            priority: "medium", eta: "ETA 18 Sep" },
+      { name: "Shear Blade Unit",        plant: "RMD7", status: "down", since: "13 Sep 2026", days: 2,  reason: "รอใบมีดสำรอง",                                    priority: "low",    eta: "ETA 17 Sep" },
+      { name: "Walking Beam Furnace #2", plant: "MSM",  status: "down", since: "2 Sep 2026",  days: 13, reason: "ซ่อมใหญ่ระบบเผาไหม้",                             priority: "high",   eta: "ETA 22 Sep" },
+      { name: "Roll Grinder",            plant: "RMD8", status: "degraded", since: "9 Sep 2026",  days: 6,  reason: "รอโปรแกรม CNC อัปเดต",                            priority: "medium", eta: "ETA 19 Sep" },
+      { name: "Water Treatment Pump",    plant: "MSM",  status: "down", since: "6 Sep 2026",  days: 9,  reason: "รออะไหล่ Impeller",                               priority: "high",   eta: "ETA 20 Sep" },
+      { name: "Billet Conveyor Motor",   plant: "RMD7", status: "degraded", since: "15 Sep 2026", days: 1,  reason: "ตรวจสอบสายพาน",                                   priority: "low",    eta: "ETA 16 Sep" }
     ];
     window.__zbPrintData = window.__zbPrintData || {};
     window.__zbPrintData.equipmentData = EQUIPMENT_DATA;
@@ -488,13 +488,19 @@
     var closeBtn = document.getElementById("equipmentModalCloseBtn");
     if (!body) return;
 
+    // Red = machine down; yellow = running below capacity / unstable.
+    var STATUS_LABEL = { down: "Down", degraded: "Degraded" };
+    var STATUS_TITLE = { down: "เครื่อง Down", degraded: "ผลิตไม่เต็มกำลัง / รวน / ใช้งานได้ไม่เต็มประสิทธิภาพ" };
+
     function rowHtml(r) {
       var pct = Math.round(Math.min(100, (r.days / maxDays) * 100));
+      var status = r.status === "degraded" ? "degraded" : "down";
       return '<tr>' +
         '<td class="line-name">' + r.name + '</td>' +
+        '<td><span class="eq-status ' + status + '" title="' + STATUS_TITLE[status] + '">' + STATUS_LABEL[status] + '</span></td>' +
         '<td>' + r.plant + '</td>' +
         '<td>' + r.since + '</td>' +
-        '<td class="num"><span class="eq-bar-track"><span class="eq-bar-fill" style="width:' + pct + '%;"></span></span>' + r.days + (r.days === 1 ? ' day' : ' days') + '</td>' +
+        '<td class="num"><span class="eq-bar-track"><span class="eq-bar-fill ' + status + '" style="width:' + pct + '%;"></span></span>' + r.days + (r.days === 1 ? ' day' : ' days') + '</td>' +
         '<td class="reason-cell">' + r.reason + '</td>' +
         '<td><span class="eta-tag">' + r.eta + '</span></td>' +
         '</tr>';
@@ -505,7 +511,7 @@
       var rows = EQUIPMENT_DATA.slice(start, start + PAGE_SIZE);
       body.innerHTML = rows.map(rowHtml).join("");
 
-      var infoText = 'Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, EQUIPMENT_DATA.length) + ' of ' + EQUIPMENT_DATA.length + ' units down';
+      var infoText = 'Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, EQUIPMENT_DATA.length) + ' of ' + EQUIPMENT_DATA.length + ' units unservice';
       var controls = '<button class="page-btn" type="button" data-nav="prev"' + (page === 1 ? ' disabled' : '') + ' aria-label="Previous page">&lsaquo;</button>';
       for (var p = 1; p <= totalPages; p++) {
         controls += '<button class="page-btn' + (p === page ? ' active' : '') + '" type="button" data-page="' + p + '">' + p + '</button>';
@@ -677,17 +683,17 @@
         (sheRows.length ? sheRows.join("") : '<li class="ps-empty">No SHE items today</li>') + "</ul></div>"
       );
 
-      // 06: Equipment Down Time — only when mock section is expanded
+      // 06: Equipment Unservice — only when mock section is expanded
       var eqSection = document.querySelector('[data-mock-section="equipment"]');
       if (eqSection && !eqSection.classList.contains("is-collapsed")) {
         var eqTop = (data.equipmentData || []).slice().sort(function (a, b) { return b.days - a.days; }).slice(0, 3);
         var eqRows = eqTop.map(function (r) {
-          var pClass = r.priority === "high" ? "bad" : r.priority === "medium" ? "warn" : "good";
-          return "<li><b>" + esc(r.name) + "</b> (" + esc(r.plant) + ") " + r.days + "d <span class=\"ps-pill " + pClass + "\">" + esc(r.priority) + "</span></li>";
+          var degraded = r.status === "degraded";
+          return "<li><b>" + esc(r.name) + "</b> (" + esc(r.plant) + ") " + r.days + "d <span class=\"ps-pill " + (degraded ? "warn" : "bad") + "\">" + (degraded ? "Degraded" : "Down") + "</span></li>";
         });
         blocks.push(
-          '<div class="ps-block"><div class="ps-block-title">06 &middot; Equipment Down Time</div><ul class="ps-list">' +
-          (eqRows.length ? eqRows.join("") : '<li class="ps-empty">No equipment down</li>') + "</ul></div>"
+          '<div class="ps-block"><div class="ps-block-title">06 &middot; Equipment Unservice</div><ul class="ps-list">' +
+          (eqRows.length ? eqRows.join("") : '<li class="ps-empty">No equipment unservice</li>') + "</ul></div>"
         );
       }
 
@@ -788,6 +794,19 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var field = document.querySelector('.h-text[data-key="' + key + '"]');
+          var events = data.downtimeDefault || [];
+          if ((!data.record || !data.record.text.trim()) && events.length) {
+            // Default highlight: downtime events > 120 min (longest first). Treated as the baseline,
+            // so it is only persisted once someone edits it.
+            var text = events.map(function (e) { return "Downtime " + e.minutes + " นาที: " + e.cause; }).join(" / ");
+            if (field) field.textContent = text;
+            lastSaved[key] = text;
+            lastSavedTime[key] = events[0].startTime || "";
+            renderTime(key, lastSavedTime[key]);
+            var el = metaEls[key];
+            if (el) { el.classList.remove("saving", "err"); el.textContent = "ค่าเริ่มต้นจาก Downtime เกิน 120 นาที (ยังไม่ได้บันทึก)"; }
+            return;
+          }
           if (data.record) {
             if (field) field.textContent = data.record.text;
             lastSaved[key] = data.record.text;

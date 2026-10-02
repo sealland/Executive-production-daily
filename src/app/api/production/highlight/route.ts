@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api/http";
+import { getLongDowntimeEvents, type LongDowntimeEvent } from "@/lib/services/downtimeDetail";
 import { getHighlight, InvalidEmployeeError, saveHighlight } from "@/lib/services/highlight";
 
 export async function GET(request: Request) {
@@ -9,7 +10,12 @@ export async function GET(request: Request) {
 
   try {
     const record = await getHighlight(date, plant);
-    return jsonOk({ record });
+    // No saved highlight yet -> suggest downtime events > 120 min as the default text.
+    let downtimeDefault: LongDowntimeEvent[] = [];
+    if (!record || !record.text.trim()) {
+      downtimeDefault = await getLongDowntimeEvents(date, plant).catch(() => []);
+    }
+    return jsonOk({ record, downtimeDefault });
   } catch (error) {
     return jsonError("โหลด Highlight ไม่สำเร็จ", 500, error);
   }
