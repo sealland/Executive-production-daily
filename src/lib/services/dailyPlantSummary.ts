@@ -9,6 +9,8 @@ export interface DailyPlantSummary {
   actualTon: number;
   achievementPct: number | null;
   rmWeightTon: number | null;
+  /** Yield numerator: FG bundle weight for RMD7/RMD8, actual production for MSM. */
+  yieldOutputTon: number | null;
   yieldPct: number | null;
 }
 
@@ -37,13 +39,17 @@ export async function getDailyPlantSummary(reportDate: string): Promise<DailyPla
   }
 
   const rmRows = await Promise.all(RM_PLANTS.map((plant) => getRmWeight(plant, reportDate)));
-  const rmByPlant = new Map(rmRows.filter(Boolean).map((r) => [r!.plant, r!.rmWeightTon]));
+  const rmByPlant = new Map(rmRows.filter(Boolean).map((r) => [r!.plant, r!]));
 
   return RM_PLANTS.map((plant) => {
     const prod = byProdPlant.get(PROD_PLANT_CODE[plant]) || { actualTon: 0, targetTon: 0 };
-    const rmWeightTon = rmByPlant.get(plant) ?? null;
+    const rm = rmByPlant.get(plant);
+    const rmWeightTon = rm?.rmWeightTon ?? null;
     const achievementPct = prod.targetTon > 0 ? (prod.actualTon / prod.targetTon) * 100 : null;
-    const yieldPct = rmWeightTon && rmWeightTon > 0 ? (prod.actualTon / rmWeightTon) * 100 : null;
+    // RMD7/RMD8 rows synced before the per-charge formula have no fg_weight_ton -> no yield until re-synced.
+    const yieldOutputTon = plant === "MSM" ? prod.actualTon : rm?.fgWeightTon ?? null;
+    const yieldPct =
+      rmWeightTon && rmWeightTon > 0 && yieldOutputTon != null ? (yieldOutputTon / rmWeightTon) * 100 : null;
     return {
       plant,
       reportDate,
@@ -51,6 +57,7 @@ export async function getDailyPlantSummary(reportDate: string): Promise<DailyPla
       actualTon: prod.actualTon,
       achievementPct,
       rmWeightTon,
+      yieldOutputTon,
       yieldPct
     };
   });

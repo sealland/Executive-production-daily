@@ -429,9 +429,9 @@
             if (panel) applyPlant(panel, row);
             totalActual += row.actualTon || 0;
             totalTarget += row.targetTon || 0;
-            if (row.rmWeightTon > 0) {
+            if (row.rmWeightTon > 0 && row.yieldOutputTon != null) {
               totalRm += row.rmWeightTon;
-              rmActual += row.actualTon || 0;
+              rmActual += row.yieldOutputTon;
               rmPlants.push(row.plant);
             }
           });
