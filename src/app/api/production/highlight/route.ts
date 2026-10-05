@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const record = await getHighlight(date, plant);
-    // No saved highlight yet -> suggest downtime events > 120 min as the default text.
+    // No saved highlight yet -> suggest downtime events >= 120 min as the default text.
     let downtimeDefault: LongDowntimeEvent[] = [];
     if (!record || !record.text.trim()) {
       downtimeDefault = await getLongDowntimeEvents(date, plant).catch(() => []);

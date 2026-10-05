@@ -50,7 +50,7 @@ export interface LongDowntimeEvent {
 
 const PLANT_TO_STATION: Record<string, string> = { RMD7: "RMD7", RMD8: "RMD8", MSM: "SMD" };
 
-// Single downtime events longer than `minMinutes` for one plant on reportDate, longest first.
+// Single downtime events of at least `minMinutes` for one plant on reportDate, longest first.
 // Used as the default plant highlight when nobody has written one yet.
 export async function getLongDowntimeEvents(
   reportDate: string,
@@ -77,7 +77,7 @@ export async function getLongDowntimeEvents(
       FROM ${table}
       WHERE CONVERT(date, StartTime) = @d
         AND LTRIM(RTRIM(Station)) = @station
-        AND Minute > @minMinutes
+        AND Minute >= @minMinutes
       ORDER BY Minute DESC
     `);
 

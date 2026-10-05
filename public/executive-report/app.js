@@ -796,7 +796,7 @@
           var field = document.querySelector('.h-text[data-key="' + key + '"]');
           var events = data.downtimeDefault || [];
           if ((!data.record || !data.record.text.trim()) && events.length) {
-            // Default highlight: downtime events > 120 min (longest first). Treated as the baseline,
+            // Default highlight: downtime events >= 120 min (longest first). Treated as the baseline,
             // so it is only persisted once someone edits it.
             var text = events.map(function (e) { return "Downtime " + e.minutes + " นาที: " + e.cause; }).join(" / ");
             if (field) field.textContent = text;
@@ -804,7 +804,17 @@
             lastSavedTime[key] = events[0].startTime || "";
             renderTime(key, lastSavedTime[key]);
             var el = metaEls[key];
-            if (el) { el.classList.remove("saving", "err"); el.textContent = "ค่าเริ่มต้นจาก Downtime เกิน 120 นาที (ยังไม่ได้บันทึก)"; }
+            if (el) { el.classList.remove("saving", "err"); el.textContent = "ค่าเริ่มต้นจาก Downtime ≥ 120 นาที (ยังไม่ได้บันทึก)"; }
+            return;
+          }
+          if (!data.record || !data.record.text.trim()) {
+            // No saved highlight and no long downtime: say so instead of leaving the card blank.
+            if (field) field.textContent = "";
+            lastSaved[key] = "";
+            lastSavedTime[key] = "";
+            renderTime(key, "");
+            var emptyEl = metaEls[key];
+            if (emptyEl) { emptyEl.classList.remove("saving", "err"); emptyEl.textContent = "ไม่มี Downtime ≥ 120 นาที ในวันนี้"; }
             return;
           }
           if (data.record) {
