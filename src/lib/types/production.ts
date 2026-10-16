@@ -123,6 +123,9 @@ export interface DowntimeSummary {
   reasons: DowntimeReasonRow[];
   asOfDate: string | null;
   scopeNote: string | null;
+  /** Plan-window metadata for the anchor (today) day — from plan_all or default 09:00→09:00. */
+  windowSource?: "plan" | "default" | "mixed";
+  windows?: Array<{ station: string; start: string; end: string }>;
 }
 
 export interface LossRow {

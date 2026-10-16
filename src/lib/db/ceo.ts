@@ -16,6 +16,8 @@ const config: sql.config = {
     encrypt: boolEnv("SQL_SERVER_ENCRYPT", false),
     trustServerCertificate: boolEnv("SQL_SERVER_TRUST_SERVER_CERT", true)
   },
+  connectionTimeout: 8000,
+  requestTimeout: 30000,
   pool: {
     max: 10,
     min: 0,

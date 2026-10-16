@@ -19,9 +19,15 @@ import {
   bindProductionFilters
 } from "@/lib/query/productionFilters";
 import { buildDowntimeConditions } from "@/lib/query/downtimeFilters";
-import { normalizePlant } from "@/lib/constants/plants";
+import { downtimeStationsForPlant, normalizePlant } from "@/lib/constants/plants";
 import type { DashboardFilters, KpiMetric } from "@/lib/types/production";
-import { getDowntimePool, getDowntimeTable, isDowntimeConfigured } from "@/lib/db/downtime";
+import { getDowntimePool, getDowntimeTable, isDowntimeConfigured, sql as dtSql } from "@/lib/db/downtime";
+import {
+  CLIPPED_MINUTES_SQL,
+  WINDOWS_OPENJSON_SQL,
+  getPlanWindowsForDate,
+  windowsToSqlPayload
+} from "@/lib/services/planWindow";
 
 function canUseCppTarget(filters: DashboardFilters) {
   return !filters.line && !filters.materialCode && !filters.productGroup;
@@ -59,14 +65,32 @@ async function sumProduction(
 
 async function downtimeMinutes(date: string, filters: DashboardFilters) {
   if (!isDowntimeConfigured()) return 0;
+  const stations = filters.plant
+    ? downtimeStationsForPlant(filters.plant)
+    : ["RMD7", "RMD8", "SMD"];
+  const stationDays = await getPlanWindowsForDate(date, stations.length ? stations : ["RMD7", "RMD8", "SMD"]);
+  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
   const pool = await getDowntimePool();
   const request = pool.request();
-  request.input("d", sql.Date, date);
-  const conditions = ["CONVERT(date, StartTime) = @d", ...buildDowntimeConditions(request, filters)];
+  request.input("windowsJson", dtSql.NVarChar, json);
+  request.input("boundStart", dtSql.NVarChar, boundStart);
+  request.input("boundEnd", dtSql.NVarChar, boundEnd);
+  const filterConds = buildDowntimeConditions(request, filters, "d");
+  const extra = filterConds.length ? `AND ${filterConds.join(" AND ")}` : "";
   const result = await request.query(`
-    SELECT ISNULL(SUM(Minute), 0) AS minutes
-    FROM ${getDowntimeTable()}
-    WHERE ${conditions.join(" AND ")}
+    SELECT ISNULL(SUM(clippedMinutes), 0) AS minutes
+    FROM (
+      SELECT ${CLIPPED_MINUTES_SQL} AS clippedMinutes
+      FROM ${getDowntimeTable()} d
+      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+        ON LTRIM(RTRIM(d.Station)) = w.station
+       AND d.StartTime < w.winEnd
+       AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+      WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+        AND d.StartTime < CONVERT(datetime, @boundEnd)
+        AND ${CLIPPED_MINUTES_SQL} > 0
+        ${extra}
+    ) clipped
   `);
   return Number(result.recordset[0]?.minutes || 0);
 }

@@ -337,6 +337,41 @@
       }
     }
 
+    function formatWindowNote(windows, windowSource) {
+      var noteEl = document.getElementById("downtimeWindowNote");
+      if (!noteEl) return;
+      var list = windows || [];
+      function hm(iso) {
+        if (!iso || iso.length < 16) return "--:--";
+        return iso.slice(11, 16);
+      }
+      if (!list.length) {
+        noteEl.textContent = "นับ Downtime 09:00-09:00 (default)";
+        return;
+      }
+      // Collapse to unique HH:MM-HH:MM labels; show plant prefixes only when they differ.
+      var labels = [];
+      var seen = {};
+      list.forEach(function (w) {
+        var label = hm(w.start) + "-" + hm(w.end);
+        if (!seen[label]) { seen[label] = []; labels.push(label); }
+        seen[label].push(w.station);
+      });
+      var text;
+      if (labels.length === 1) {
+        text = "นับ Downtime " + labels[0];
+      } else {
+        text = "นับ Downtime " + labels.map(function (lab) {
+          var stations = seen[lab].filter(function (s, i, a) { return a.indexOf(s) === i; });
+          return stations.join("/") + " " + lab;
+        }).join(" · ");
+      }
+      if (windowSource && windowSource !== "plan") {
+        text += windowSource === "default" ? " (default)" : " (" + windowSource + ")";
+      }
+      noteEl.textContent = text;
+    }
+
     function loadDowntimeData() {
       if (summaryInline) summaryInline.innerHTML = "กำลังโหลด…";
       fetch("/api/production/downtime-detail?date=" + ZB.reportDate)
@@ -344,6 +379,7 @@
         .then(function (data) {
           DOWNTIME_DATA = data.rows || [];
           window.__zbPrintData.downtimeData = DOWNTIME_DATA;
+          formatWindowNote(data.windows, data.windowSource);
           renderDowntimeTile(DOWNTIME_DATA);
           var activePlant = plantTabs.filter(function (t) { return t.classList.contains("active"); })[0];
           renderDowntime(activePlant ? activePlant.dataset.plant : "all");

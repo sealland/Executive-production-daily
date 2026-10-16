@@ -1,4 +1,11 @@
 import { getDowntimePool, getDowntimeTable, isDowntimeConfigured, sql } from "@/lib/db/downtime";
+import {
+  CLIPPED_MINUTES_SQL,
+  WINDOWS_OPENJSON_SQL,
+  getPlanWindowsForDate,
+  windowsToSqlPayload,
+  type PlanWindowMeta
+} from "@/lib/services/planWindow";
 
 export type ReportCategory = "mechanical" | "electrical" | "process" | "changeover" | "planned" | "quality" | "others";
 
@@ -9,6 +16,12 @@ export interface DowntimeDetailRow {
   cause: string;
   duration: number;
   occ: number;
+}
+
+export interface DowntimeDetailResult {
+  rows: DowntimeDetailRow[];
+  windowSource: PlanWindowMeta["windowSource"];
+  windows: PlanWindowMeta["windows"];
 }
 
 const STATION_TO_PLANT: Record<string, { plant: "rmd7" | "rmd8" | "msm"; plantLabel: "RMD7" | "RMD8" | "MSM" }> = {
@@ -50,7 +63,7 @@ export interface LongDowntimeEvent {
 
 const PLANT_TO_STATION: Record<string, string> = { RMD7: "RMD7", RMD8: "RMD8", MSM: "SMD" };
 
-// Single downtime events of at least `minMinutes` for one plant on reportDate, longest first.
+// Single downtime events of at least `minMinutes` (after plan-window clip) for one plant.
 // Used as the default plant highlight when nobody has written one yet.
 export async function getLongDowntimeEvents(
   reportDate: string,
@@ -61,25 +74,47 @@ export async function getLongDowntimeEvents(
   const station = PLANT_TO_STATION[plant.toUpperCase()];
   if (!station || !isDowntimeConfigured()) return [];
 
+  const stationDays = await getPlanWindowsForDate(reportDate, [station]);
+  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
+
   const pool = await getDowntimePool();
   const table = getDowntimeTable();
-  const result = await pool
-    .request()
-    .input("d", sql.Date, reportDate)
-    .input("station", sql.NVarChar, station)
-    .input("minMinutes", sql.Int, minMinutes)
-    .input("limit", sql.Int, Math.min(Math.max(1, limit), 10))
-    .query(`
-      SELECT TOP (@limit)
-        ISNULL(NULLIF(LTRIM(RTRIM(Problem)), ''), ISNULL(Cause, N'ไม่ระบุ')) AS problem,
-        Minute AS minutes,
-        CONVERT(varchar(5), StartTime, 108) AS startTime
-      FROM ${table}
-      WHERE CONVERT(date, StartTime) = @d
-        AND LTRIM(RTRIM(Station)) = @station
-        AND Minute >= @minMinutes
-      ORDER BY Minute DESC
-    `);
+  const request = pool.request();
+  request.input("windowsJson", sql.NVarChar, json);
+  request.input("boundStart", sql.NVarChar, boundStart);
+  request.input("boundEnd", sql.NVarChar, boundEnd);
+  request.input("station", sql.NVarChar, station);
+  request.input("minMinutes", sql.Int, minMinutes);
+  request.input("limit", sql.Int, Math.min(Math.max(1, limit), 10));
+
+  const result = await request.query(`
+    SELECT TOP (@limit)
+      problem,
+      clippedMinutes AS minutes,
+      startTime
+    FROM (
+      SELECT
+        ISNULL(NULLIF(LTRIM(RTRIM(d.Problem)), ''), ISNULL(d.Cause, N'ไม่ระบุ')) AS problem,
+        CONVERT(varchar(5), d.StartTime, 108) AS startTime,
+        SUM(${CLIPPED_MINUTES_SQL}) AS clippedMinutes
+      FROM ${table} d
+      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+        ON LTRIM(RTRIM(d.Station)) = w.station
+       AND d.StartTime < w.winEnd
+       AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+      WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+        AND d.StartTime < CONVERT(datetime, @boundEnd)
+        AND LTRIM(RTRIM(d.Station)) = @station
+        AND ${CLIPPED_MINUTES_SQL} > 0
+      GROUP BY
+        d.StartTime,
+        d.Minute,
+        d.Problem,
+        d.Cause
+    ) clipped
+    WHERE clippedMinutes >= @minMinutes
+    ORDER BY clippedMinutes DESC
+  `);
 
   return (result.recordset as Array<{ problem: string; minutes: number; startTime: string | null }>).map((row) => ({
     cause: row.problem,
@@ -88,46 +123,77 @@ export async function getLongDowntimeEvents(
   }));
 }
 
-export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDetailRow[]> {
-  if (!isDowntimeConfigured()) return [];
+export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDetailResult> {
+  const stationDays = await getPlanWindowsForDate(reportDate);
+  const { json, boundStart, boundEnd, meta } = windowsToSqlPayload(stationDays);
+
+  if (!isDowntimeConfigured()) {
+    return { rows: [], windowSource: meta.windowSource, windows: meta.windows };
+  }
 
   const pool = await getDowntimePool();
   const table = getDowntimeTable();
-  const result = await pool
-    .request()
-    .input("d", sql.Date, reportDate)
-    .query(`
-      SELECT
-        LTRIM(RTRIM(Station)) AS station,
-        LTRIM(RTRIM(ISNULL([Group], ''))) AS grp,
-        ISNULL(NULLIF(LTRIM(RTRIM(Problem)), ''), ISNULL(Cause, N'ไม่ระบุ')) AS problem,
-        Minute AS minutes
-      FROM ${table}
-      WHERE CONVERT(date, StartTime) = @d
-        AND LTRIM(RTRIM(Station)) IN ('RMD7', 'RMD8', 'SMD')
-    `);
+  const request = pool.request();
+  request.input("windowsJson", sql.NVarChar, json);
+  request.input("boundStart", sql.NVarChar, boundStart);
+  request.input("boundEnd", sql.NVarChar, boundEnd);
+
+  // Aggregate clipped minutes in SQL (bounded by distinct station/group/problem).
+  const result = await request.query(`
+    SELECT
+      LTRIM(RTRIM(d.Station)) AS station,
+      LTRIM(RTRIM(ISNULL(d.[Group], ''))) AS grp,
+      ISNULL(NULLIF(LTRIM(RTRIM(d.Problem)), ''), ISNULL(d.Cause, N'ไม่ระบุ')) AS problem,
+      SUM(${CLIPPED_MINUTES_SQL}) AS minutes,
+      COUNT(*) AS occ
+    FROM ${table} d
+    INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      ON LTRIM(RTRIM(d.Station)) = w.station
+     AND d.StartTime < w.winEnd
+     AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+    WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+      AND d.StartTime < CONVERT(datetime, @boundEnd)
+      AND LTRIM(RTRIM(d.Station)) IN ('RMD7', 'RMD8', 'SMD')
+      AND ${CLIPPED_MINUTES_SQL} > 0
+    GROUP BY
+      LTRIM(RTRIM(d.Station)),
+      LTRIM(RTRIM(ISNULL(d.[Group], ''))),
+      ISNULL(NULLIF(LTRIM(RTRIM(d.Problem)), ''), ISNULL(d.Cause, N'ไม่ระบุ'))
+  `);
 
   const bucket = new Map<string, DowntimeDetailRow>();
-  for (const row of result.recordset as Array<{ station: string; grp: string; problem: string; minutes: number }>) {
+  for (const row of result.recordset as Array<{
+    station: string;
+    grp: string;
+    problem: string;
+    minutes: number;
+    occ: number;
+  }>) {
     const stationInfo = STATION_TO_PLANT[row.station];
     if (!stationInfo) continue;
     const category = mapCategory(row.grp);
     const key = row.station + "|" + category + "|" + row.problem;
     const existing = bucket.get(key);
+    const minutes = Number(row.minutes || 0);
+    const occ = Number(row.occ || 0);
     if (existing) {
-      existing.duration += Number(row.minutes || 0);
-      existing.occ += 1;
+      existing.duration += minutes;
+      existing.occ += occ;
     } else {
       bucket.set(key, {
         plant: stationInfo.plant,
         plantLabel: stationInfo.plantLabel,
         category,
         cause: row.problem,
-        duration: Number(row.minutes || 0),
-        occ: 1
+        duration: minutes,
+        occ
       });
     }
   }
 
-  return [...bucket.values()].sort((a, b) => b.duration - a.duration);
+  return {
+    rows: [...bucket.values()].sort((a, b) => b.duration - a.duration),
+    windowSource: meta.windowSource,
+    windows: meta.windows
+  };
 }

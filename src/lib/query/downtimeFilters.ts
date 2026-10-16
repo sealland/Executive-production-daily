@@ -6,24 +6,27 @@ import type { DashboardFilters } from "@/lib/types/production";
 /**
  * Build the WHERE conditions for the Downtime database from dashboard filters.
  * Line names have to be translated into machine codes first.
+ * @param tableAlias optional alias (e.g. "d") when the Downtimes table is aliased.
  */
 export function buildDowntimeConditions(
   request: sql.Request,
-  filters: DashboardFilters
+  filters: DashboardFilters,
+  tableAlias?: string
 ): string[] {
+  const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
   const conditions: string[] = [];
 
   if (filters.plant) {
     const stations = downtimeStationsForPlant(filters.plant);
     if (stations.length === 1) {
       request.input("plant", sql.NVarChar, stations[0]);
-      conditions.push("LTRIM(RTRIM(Station)) = @plant");
+      conditions.push(`LTRIM(RTRIM(${col("Station")})) = @plant`);
     } else if (stations.length > 1) {
       const params = stations.map((station, index) => {
         request.input(`plant${index}`, sql.NVarChar, station);
         return `@plant${index}`;
       });
-      conditions.push(`LTRIM(RTRIM(Station)) IN (${params.join(", ")})`);
+      conditions.push(`LTRIM(RTRIM(${col("Station")})) IN (${params.join(", ")})`);
     }
   }
 
@@ -33,12 +36,12 @@ export function buildDowntimeConditions(
       request.input(`machine${index}`, sql.NVarChar, machine);
       return `@machine${index}`;
     });
-    conditions.push(`LTRIM(RTRIM(Machine)) IN (${params.join(", ")})`);
+    conditions.push(`LTRIM(RTRIM(${col("Machine")})) IN (${params.join(", ")})`);
   }
 
   if (filters.shift) {
     request.input("shift", sql.NVarChar, filters.shift.trim());
-    conditions.push("LTRIM(RTRIM(shift)) = @shift");
+    conditions.push(`LTRIM(RTRIM(${col("shift")})) = @shift`);
   }
 
   return conditions;

@@ -8,11 +8,59 @@ import { mapDowntimeCategory } from "@/lib/constants/downtime-groups";
 import { downtimeScopeNote } from "@/lib/constants/line-machine";
 import { buildDowntimeConditions } from "@/lib/query/downtimeFilters";
 import { previousDay, resolvePeriod } from "@/lib/calc/periods";
+import {
+  CLIPPED_MINUTES_SQL,
+  WINDOWS_OPENJSON_SQL,
+  getPlanWindowsForRange,
+  windowsToSqlPayload
+} from "@/lib/services/planWindow";
+import { downtimeStationsForPlant } from "@/lib/constants/plants";
 import type {
   DashboardFilters,
   DowntimeSummary,
   LossRow
 } from "@/lib/types/production";
+
+function stationsForFilters(filters: DashboardFilters): string[] {
+  if (filters.plant) {
+    const stations = downtimeStationsForPlant(filters.plant);
+    if (stations.length) return stations;
+  }
+  return ["RMD7", "RMD8", "SMD"];
+}
+
+async function sumClippedMinutes(
+  table: string,
+  filters: DashboardFilters,
+  stationDays: Awaited<ReturnType<typeof getPlanWindowsForRange>>
+): Promise<number> {
+  if (!stationDays.length) return 0;
+  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
+  const pool = await getDowntimePool();
+  const request = pool.request();
+  request.input("windowsJson", sql.NVarChar, json);
+  request.input("boundStart", sql.NVarChar, boundStart);
+  request.input("boundEnd", sql.NVarChar, boundEnd);
+  const filterConds = buildDowntimeConditions(request, filters, "d");
+  const extraSql = filterConds.length ? `AND ${filterConds.join(" AND ")}` : "";
+
+  const result = await request.query(`
+    SELECT ISNULL(SUM(clippedMinutes), 0) AS minutes
+    FROM (
+      SELECT ${CLIPPED_MINUTES_SQL} AS clippedMinutes
+      FROM ${table} d
+      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+        ON LTRIM(RTRIM(d.Station)) = w.station
+       AND d.StartTime < w.winEnd
+       AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+      WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+        AND d.StartTime < CONVERT(datetime, @boundEnd)
+        AND ${CLIPPED_MINUTES_SQL} > 0
+        ${extraSql}
+    ) clipped
+  `);
+  return Number(result.recordset[0]?.minutes || 0);
+}
 
 export async function getDowntimeSummary(filters: DashboardFilters): Promise<DowntimeSummary> {
   if (!isDowntimeConfigured()) {
@@ -32,59 +80,84 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
   const prev = previousDay(today);
   const pool = await getDowntimePool();
   const table = getDowntimeTable();
+  const stations = stationsForFilters(filters);
 
-  const dayReq = pool.request();
-  dayReq.input("today", sql.Date, today);
-  dayReq.input("prev", sql.Date, prev);
-  const dayConds = buildDowntimeConditions(dayReq, filters);
-  const dayExtra = dayConds.length ? `AND ${dayConds.join(" AND ")}` : "";
+  // One plan fetch covering prev + today + full report range (no per-day query loop)
+  const rangeStart = period.startDate < prev ? period.startDate : prev;
+  const rangeEnd = period.endDate > today ? period.endDate : today;
+  const allStationDays = await getPlanWindowsForRange(rangeStart, rangeEnd, stations);
 
-  const dayResult = await dayReq.query(`
-    SELECT
-      SUM(CASE WHEN CONVERT(date, StartTime) = @today THEN Minute ELSE 0 END) AS todayMinutes,
-      SUM(CASE WHEN CONVERT(date, StartTime) = @prev THEN Minute ELSE 0 END) AS previousDayMinutes
-    FROM ${table}
-    WHERE CONVERT(date, StartTime) IN (@today, @prev)
-    ${dayExtra}
-  `);
+  const todayDays = allStationDays.filter((s) => s.planDate === today);
+  const prevDays = allStationDays.filter((s) => s.planDate === prev);
+  const rangeDays = allStationDays.filter(
+    (s) => s.planDate >= period.startDate && s.planDate <= period.endDate
+  );
 
+  const todayMeta = windowsToSqlPayload(todayDays);
+
+  const [todayMinutes, previousDayMinutes] = await Promise.all([
+    sumClippedMinutes(table, filters, todayDays),
+    sumClippedMinutes(table, filters, prevDays)
+  ]);
+
+  const { json, boundStart, boundEnd } = windowsToSqlPayload(rangeDays);
   const rangeReq = pool.request();
-  const startDate = period.startDate;
-  const endDate = period.endDate;
-  rangeReq.input("startDate", sql.Date, startDate);
-  rangeReq.input("endDate", sql.Date, endDate);
-  const rangeConds = buildDowntimeConditions(rangeReq, filters);
-  rangeConds.unshift("CONVERT(date, StartTime) >= @startDate");
-  rangeConds.unshift("CONVERT(date, StartTime) <= @endDate");
+  rangeReq.input("windowsJson", sql.NVarChar, json);
+  rangeReq.input("boundStart", sql.NVarChar, boundStart);
+  rangeReq.input("boundEnd", sql.NVarChar, boundEnd);
+  const rangeConds = buildDowntimeConditions(rangeReq, filters, "d");
+  const rangeExtra = rangeConds.length ? `AND ${rangeConds.join(" AND ")}` : "";
 
   const groupResult = await rangeReq.query(`
-    SELECT [Group] AS downtimeGroup, ISNULL(SUM(Minute), 0) AS minutes
-    FROM ${table}
-    WHERE ${rangeConds.join(" AND ")}
-    GROUP BY [Group]
+    SELECT downtimeGroup, ISNULL(SUM(clippedMinutes), 0) AS minutes
+    FROM (
+      SELECT
+        d.[Group] AS downtimeGroup,
+        ${CLIPPED_MINUTES_SQL} AS clippedMinutes
+      FROM ${table} d
+      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+        ON LTRIM(RTRIM(d.Station)) = w.station
+       AND d.StartTime < w.winEnd
+       AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+      WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+        AND d.StartTime < CONVERT(datetime, @boundEnd)
+        AND ${CLIPPED_MINUTES_SQL} > 0
+        ${rangeExtra}
+    ) clipped
+    GROUP BY downtimeGroup
   `);
 
   const reasonReq = pool.request();
-  reasonReq.input("startDate", sql.Date, startDate);
-  reasonReq.input("endDate", sql.Date, endDate);
-  const reasonConds = buildDowntimeConditions(reasonReq, filters);
-  reasonConds.unshift("CONVERT(date, StartTime) >= @startDate");
-  reasonConds.unshift("CONVERT(date, StartTime) <= @endDate");
+  reasonReq.input("windowsJson", sql.NVarChar, json);
+  reasonReq.input("boundStart", sql.NVarChar, boundStart);
+  reasonReq.input("boundEnd", sql.NVarChar, boundEnd);
+  const reasonConds = buildDowntimeConditions(reasonReq, filters, "d");
+  const reasonExtra = reasonConds.length ? `AND ${reasonConds.join(" AND ")}` : "";
 
   const reasonResult = await reasonReq.query(`
     SELECT TOP 30
-      [Group] AS downtimeGroup,
-      ISNULL(NULLIF(LTRIM(RTRIM(Problem)), ''), ISNULL(Cause, 'ไม่ระบุ')) AS problem,
-      ISNULL(SUM(Minute), 0) AS minutes,
+      downtimeGroup,
+      problem,
+      ISNULL(SUM(clippedMinutes), 0) AS minutes,
       COUNT(*) AS cnt
-    FROM ${table}
-    WHERE ${reasonConds.join(" AND ")}
-    GROUP BY [Group], ISNULL(NULLIF(LTRIM(RTRIM(Problem)), ''), ISNULL(Cause, 'ไม่ระบุ'))
-    ORDER BY SUM(Minute) DESC
+    FROM (
+      SELECT
+        d.[Group] AS downtimeGroup,
+        ISNULL(NULLIF(LTRIM(RTRIM(d.Problem)), ''), ISNULL(d.Cause, 'ไม่ระบุ')) AS problem,
+        ${CLIPPED_MINUTES_SQL} AS clippedMinutes
+      FROM ${table} d
+      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+        ON LTRIM(RTRIM(d.Station)) = w.station
+       AND d.StartTime < w.winEnd
+       AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
+      WHERE d.StartTime >= CONVERT(datetime, @boundStart)
+        AND d.StartTime < CONVERT(datetime, @boundEnd)
+        AND ${CLIPPED_MINUTES_SQL} > 0
+        ${reasonExtra}
+    ) clipped
+    GROUP BY downtimeGroup, problem
+    ORDER BY SUM(clippedMinutes) DESC
   `);
-
-  const todayMinutes = Number(dayResult.recordset[0]?.todayMinutes || 0);
-  const previousDayMinutes = Number(dayResult.recordset[0]?.previousDayMinutes || 0);
 
   const categoryMap = new Map<string, number>();
   for (const row of groupResult.recordset) {
@@ -128,11 +201,15 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
     groups,
     reasons,
     asOfDate: today,
-    scopeNote: downtimeScopeNote(filters.plant, filters.line)
+    scopeNote: downtimeScopeNote(filters.plant, filters.line),
+    windowSource: todayMeta.meta.windowSource,
+    windows: todayMeta.meta.windows
   };
 }
 
 export async function getProductionLoss(): Promise<LossRow[]> {
+  // Loss→ton conversion still unavailable; windows shared via downtime-detail / summary paths.
+  // Keep placeholders so callers stay stable (no separate downtime query here).
   return [
     {
       type: "Downtime Loss",

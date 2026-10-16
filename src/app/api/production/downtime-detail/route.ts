@@ -7,8 +7,8 @@ export async function GET(request: Request) {
   if (!date) return jsonError("date is required", 400);
 
   try {
-    const rows = await getDowntimeDetail(date);
-    return jsonOk({ rows });
+    const { rows, windowSource, windows } = await getDowntimeDetail(date);
+    return jsonOk({ rows, windowSource, windows });
   } catch (error) {
     return jsonError("โหลด Downtime Detail ไม่สำเร็จ", 500, error);
   }
