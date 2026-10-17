@@ -1,5 +1,6 @@
 import { getCeoPool, sql } from "@/lib/db/ceo";
 import { getRmWeight } from "@/lib/services/rmWeight";
+import { computeRmd7YieldPct, getRmd7RmWeightTon } from "@/lib/services/rmd7RmUsed";
 import { RM_PLANTS, type RmPlant } from "@/lib/db/rmSources";
 
 export interface DailyPlantSummary {
@@ -9,7 +10,7 @@ export interface DailyPlantSummary {
   actualTon: number;
   achievementPct: number | null;
   rmWeightTon: number | null;
-  /** Yield numerator: FG bundle weight for RMD7/RMD8, actual production for MSM. */
+  /** Yield numerator: prd_a for RMD7, FG bundle weight for RMD8, actual production for MSM. */
   yieldOutputTon: number | null;
   yieldPct: number | null;
 }
@@ -38,15 +39,41 @@ export async function getDailyPlantSummary(reportDate: string): Promise<DailyPla
     byProdPlant.set(row.plant, { actualTon: Number(row.actualTon || 0), targetTon: Number(row.targetTon || 0) });
   }
 
-  const rmRows = await Promise.all(RM_PLANTS.map((plant) => getRmWeight(plant, reportDate)));
+  const rmRows = await Promise.all(
+    RM_PLANTS.filter((p) => p !== "RMD7").map((plant) => getRmWeight(plant, reportDate))
+  );
   const rmByPlant = new Map(rmRows.filter(Boolean).map((r) => [r!.plant, r!]));
+
+  let rmd7RmWeightTon: number | null = null;
+  try {
+    rmd7RmWeightTon = await getRmd7RmWeightTon(reportDate);
+  } catch (err) {
+    console.error("[rmd7]", err);
+    rmd7RmWeightTon = null;
+  }
 
   return RM_PLANTS.map((plant) => {
     const prod = byProdPlant.get(PROD_PLANT_CODE[plant]) || { actualTon: 0, targetTon: 0 };
     const rm = rmByPlant.get(plant);
-    const rmWeightTon = rm?.rmWeightTon ?? null;
     const achievementPct = prod.targetTon > 0 ? (prod.actualTon / prod.targetTon) * 100 : null;
-    // RMD7/RMD8 rows synced before the per-charge formula have no fg_weight_ton -> no yield until re-synced.
+
+    if (plant === "RMD7") {
+      const rmWeightTon = rmd7RmWeightTon;
+      const yieldOutputTon = prod.actualTon;
+      const yieldPct = computeRmd7YieldPct(prod.actualTon, rmWeightTon);
+      return {
+        plant,
+        reportDate,
+        targetTon: prod.targetTon,
+        actualTon: prod.actualTon,
+        achievementPct,
+        rmWeightTon,
+        yieldOutputTon,
+        yieldPct
+      };
+    }
+
+    const rmWeightTon = rm?.rmWeightTon ?? null;
     const yieldOutputTon = plant === "MSM" ? prod.actualTon : rm?.fgWeightTon ?? null;
     const yieldPct =
       rmWeightTon && rmWeightTon > 0 && yieldOutputTon != null ? (yieldOutputTon / rmWeightTon) * 100 : null;
