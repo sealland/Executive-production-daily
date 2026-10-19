@@ -24,7 +24,7 @@ import type { DashboardFilters, KpiMetric } from "@/lib/types/production";
 import { getDowntimePool, getDowntimeTable, isDowntimeConfigured, sql as dtSql } from "@/lib/db/downtime";
 import {
   CLIPPED_MINUTES_SQL,
-  WINDOWS_OPENJSON_SQL,
+  attachPlanWindows,
   getPlanWindowsForDate,
   windowsToSqlPayload
 } from "@/lib/services/planWindow";
@@ -69,10 +69,10 @@ async function downtimeMinutes(date: string, filters: DashboardFilters) {
     ? downtimeStationsForPlant(filters.plant)
     : ["RMD7", "RMD8", "SMD"];
   const stationDays = await getPlanWindowsForDate(date, stations.length ? stations : ["RMD7", "RMD8", "SMD"]);
-  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
+  const { rows, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
   const pool = await getDowntimePool();
   const request = pool.request();
-  request.input("windowsJson", dtSql.NVarChar, json);
+  const windowsSql = attachPlanWindows(request, dtSql, rows);
   request.input("boundStart", dtSql.NVarChar, boundStart);
   request.input("boundEnd", dtSql.NVarChar, boundEnd);
   const filterConds = buildDowntimeConditions(request, filters, "d");
@@ -82,7 +82,7 @@ async function downtimeMinutes(date: string, filters: DashboardFilters) {
     FROM (
       SELECT ${CLIPPED_MINUTES_SQL} AS clippedMinutes
       FROM ${getDowntimeTable()} d
-      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      INNER JOIN ${windowsSql}
         ON LTRIM(RTRIM(d.Station)) = w.station
        AND d.StartTime < w.winEnd
        AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart

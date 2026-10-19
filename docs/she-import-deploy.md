@@ -1,4 +1,4 @@
-# SHE Excel import — deploy (v0.4.2)
+# SHE Excel import — deploy (v0.4.3)
 
 เป้าหมาย: เปิดอัปโหลด Excel SHE บน production (CEO_REPORT) อย่างปลอดภัย หลังรัน DDL และตั้ง env
 
@@ -12,9 +12,25 @@
 3. **Environment** (ตั้งในเซิร์ฟเวอร์ deploy โดยผู้ดูแลระบบ ห้ามใส่รหัสพนักงานใน repo/docs)
    - `SHE_IMPORT_ENABLED=true` — เปิด import (ค่าเริ่มต้นปิด = 403)
    - `SHE_UPLOAD_EMPCODES` — รหัสพนักงานที่อนุญาตอัปโหลด คั่นด้วย comma (ว่าง = ปฏิเสธทุกคน)
-4. **Deploy** — build และ deploy แอป v0.4.2 ด้วย `npm ci` (ใช้ package-lock.json)
+4. **Deploy** — build และ deploy แอป v0.4.3 ด้วย `npm ci` (ใช้ package-lock.json จาก repo นี้ — next 16.4.2 / sharp 0.35.5 ตาม lock; SHA256 ของ package-lock.json = `9331d1c5e58dee14659d6a4c8afe475de5fe00e1072b5b0218e83a9f583f6f11` ถ้าไม่ตรงให้หยุดและแจ้งโอ๊ต)
    - `tsx` ใช้เฉพาะ `npm test` และ CLI import (`npm run she:import`) ไม่จำเป็นสำหรับ runtime ของ web app
-5. **Prerequisite ก่อน deploy ครั้งแรก** — โอ๊ตรัน `npm install` หนึ่งครั้งบนเครื่องที่มี network เพื่อให้ package-lock.json มี `tsx`, แล้ว commit package-lock.json และตรวจว่า diff ของ lock มีเฉพาะ `tsx` และ `esbuild` (dependency ของ tsx) เท่านั้น
+5. **Prerequisite ก่อน deploy ครั้งแรก** — ไม่ต้องรัน `npm install` — package-lock.json มี tsx/esbuild อยู่แล้ว. ก่อน deploy ให้ commit package-lock.json ตัวปัจจุบัน (รวม next 16.4.2, sharp 0.35.5, @next/*, @img/*, tailwind oxide wasm helpers 6 ตัว) แล้วตรวจ SHA256 ตาม step 4
+
+### Access log (optional — Executive Report)
+
+แอปทำงานได้ปกติเมื่อไม่ตั้งค่าเหล่านี้ (`recordAccessLog` จะข้ามเงียบ ๆ). ถ้า infra ต้องการบันทึกการเปิดรายงาน ตั้ง env บนเซิร์ฟเวอร์ deploy (ห้าม commit password):
+
+| Variable | Example / note |
+|----------|----------------|
+| `SQL_ACCESS_LOG_HOST` | `192.168.201.115` |
+| `SQL_ACCESS_LOG_DATABASE` | `PP` (schema `dbo`) |
+| `SQL_ACCESS_LOG_TABLE` | `tbl_access_log` |
+| `SQL_ACCESS_LOG_USER` | *(infra fills in)* |
+| `SQL_ACCESS_LOG_PASSWORD` | *(infra fills in)* |
+| `SQL_ACCESS_LOG_PORT` | `1433` (optional) |
+| `SQL_ACCESS_LOG_SCHEMA` | `dbo` (optional, default `dbo`) |
+| `SQL_ACCESS_LOG_ENCRYPT` | `false` (optional) |
+| `SQL_ACCESS_LOG_TRUST_SERVER_CERT` | `true` (optional) |
 
 ## Checklist ทดสอบหลัง deploy
 
@@ -25,6 +41,7 @@
 - [ ] **Print** — ไม่แสดงรายละเอียดเหตุการณ์จาก Excel (เฉพาะสรุป)
 - [ ] ผู้ใช้ที่**ไม่**อยู่ใน `SHE_UPLOAD_EMPCODES` → 403
 - [ ] ไฟล์ผิดรูปแบบ / ไฟล์ผิด / sheet DATA ว่าง (0 แถว) → ปฏิเสธ และข้อมูลเดิมยังอยู่ครบ (ไม่ถูกลบ)
+- [ ] `/api/production/summary`, `/api/production/downtime`, `/api/production/downtime-detail?date=YYYY-MM-DD` → **200** (Downtime DB SQL 2012 / compat 110)
 
 ## Rollback
 

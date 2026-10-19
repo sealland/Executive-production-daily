@@ -1,7 +1,7 @@
 import { getDowntimePool, getDowntimeTable, isDowntimeConfigured, sql } from "@/lib/db/downtime";
 import {
   CLIPPED_MINUTES_SQL,
-  WINDOWS_OPENJSON_SQL,
+  attachPlanWindows,
   getPlanWindowsForDate,
   windowsToSqlPayload,
   type PlanWindowMeta
@@ -75,12 +75,12 @@ export async function getLongDowntimeEvents(
   if (!station || !isDowntimeConfigured()) return [];
 
   const stationDays = await getPlanWindowsForDate(reportDate, [station]);
-  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
+  const { rows, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
 
   const pool = await getDowntimePool();
   const table = getDowntimeTable();
   const request = pool.request();
-  request.input("windowsJson", sql.NVarChar, json);
+  const windowsSql = attachPlanWindows(request, sql, rows);
   request.input("boundStart", sql.NVarChar, boundStart);
   request.input("boundEnd", sql.NVarChar, boundEnd);
   request.input("station", sql.NVarChar, station);
@@ -98,7 +98,7 @@ export async function getLongDowntimeEvents(
         CONVERT(varchar(5), d.StartTime, 108) AS startTime,
         SUM(${CLIPPED_MINUTES_SQL}) AS clippedMinutes
       FROM ${table} d
-      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      INNER JOIN ${windowsSql}
         ON LTRIM(RTRIM(d.Station)) = w.station
        AND d.StartTime < w.winEnd
        AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
@@ -125,7 +125,7 @@ export async function getLongDowntimeEvents(
 
 export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDetailResult> {
   const stationDays = await getPlanWindowsForDate(reportDate);
-  const { json, boundStart, boundEnd, meta } = windowsToSqlPayload(stationDays);
+  const { rows, boundStart, boundEnd, meta } = windowsToSqlPayload(stationDays);
 
   if (!isDowntimeConfigured()) {
     return { rows: [], windowSource: meta.windowSource, windows: meta.windows };
@@ -134,7 +134,7 @@ export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDet
   const pool = await getDowntimePool();
   const table = getDowntimeTable();
   const request = pool.request();
-  request.input("windowsJson", sql.NVarChar, json);
+  const windowsSql = attachPlanWindows(request, sql, rows);
   request.input("boundStart", sql.NVarChar, boundStart);
   request.input("boundEnd", sql.NVarChar, boundEnd);
 
@@ -147,7 +147,7 @@ export async function getDowntimeDetail(reportDate: string): Promise<DowntimeDet
       SUM(${CLIPPED_MINUTES_SQL}) AS minutes,
       COUNT(*) AS occ
     FROM ${table} d
-    INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+    INNER JOIN ${windowsSql}
       ON LTRIM(RTRIM(d.Station)) = w.station
      AND d.StartTime < w.winEnd
      AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart

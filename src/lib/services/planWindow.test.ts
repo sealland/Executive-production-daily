@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import sql from "mssql";
 import {
+  MAX_PLAN_WINDOWS,
+  WindowLimitError,
+  attachPlanWindows,
+  bindPlanWindowParams,
+  buildWindowsValuesSql,
   defaultWindow,
   formatWindowHm,
   mergeWindows,
   parsePrdTime,
   toSqlDateTimeLocal,
   windowsToSqlPayload,
+  type PlanWindowSqlRow,
   type StationDayWindows
 } from "./planWindow";
 
@@ -128,8 +135,7 @@ describe("windowsToSqlPayload merge across adjacent days", () => {
         windowSource: "plan"
       }
     ];
-    const { json, meta, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
-    const rows = JSON.parse(json) as Array<{ station: string; winStart: string; winEnd: string }>;
+    const { rows, meta, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].station, "RMD7");
     assert.equal(rows[0].winStart, "2026-10-15T09:00:00");
@@ -154,14 +160,74 @@ describe("windowsToSqlPayload merge across adjacent days", () => {
         windowSource: "plan"
       }
     ];
-    const rows = JSON.parse(windowsToSqlPayload(stationDays).json) as Array<{
-      winStart: string;
-      winEnd: string;
-    }>;
+    const rows = windowsToSqlPayload(stationDays).rows;
     assert.equal(rows.length, 2);
     assert.equal(rows[0].winStart, "2026-10-15T09:00:00");
     assert.equal(rows[0].winEnd, "2026-10-15T13:00:00");
     assert.equal(rows[1].winStart, "2026-10-16T08:00:00");
     assert.equal(rows[1].winEnd, "2026-10-16T17:00:00");
+  });
+});
+
+describe("SQL 2012 window VALUES helper (T-006)", () => {
+  const sampleRows: PlanWindowSqlRow[] = [
+    { station: "RMD7", winStart: "2026-10-15T09:00:00", winEnd: "2026-10-16T09:00:00" },
+    { station: "RMD8", winStart: "2026-10-15T22:00:00", winEnd: "2026-10-16T03:00:00" }
+  ];
+
+  it("generated SQL avoids OPENJSON and other compat-130+ functions", () => {
+    const fragment = buildWindowsValuesSql(sampleRows.length);
+    assert.doesNotMatch(fragment, /OPENJSON/i);
+    assert.doesNotMatch(fragment, /STRING_SPLIT/i);
+    assert.doesNotMatch(fragment, /STRING_AGG/i);
+    assert.doesNotMatch(fragment, /JSON_VALUE/i);
+    assert.match(fragment, /\(VALUES/);
+    assert.match(fragment, /AS w\(station, winStart, winEnd\)/);
+  });
+
+  it("binds one parameter triple per window; values are not inlined in SQL", () => {
+    const bound: Array<{ name: string; value: unknown }> = [];
+    const fakeRequest = {
+      input(name: string, _type: unknown, value: unknown) {
+        bound.push({ name, value });
+      }
+    };
+    const fragment = attachPlanWindows(fakeRequest, sql, sampleRows);
+    assert.equal(bound.length, sampleRows.length * 3);
+    assert.match(fragment, /@w0_st/);
+    assert.match(fragment, /@w1_we/);
+    for (const row of sampleRows) {
+      assert.equal(fragment.includes(row.winStart), false);
+      assert.equal(fragment.includes(row.station), false);
+    }
+    const names = new Set(bound.map((b) => b.name));
+    assert.equal(names.size, bound.length);
+  });
+
+  it("throws WindowLimitError when window count exceeds cap", () => {
+    const stationDays: StationDayWindows[] = [];
+    const base = new Date(2020, 0, 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    for (let i = 0; i <= MAX_PLAN_WINDOWS; i++) {
+      const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+      const day = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+      stationDays.push({
+        station: "RMD7",
+        planDate: day,
+        windows: [parsePrdTime("09:00-13:00", day)!],
+        windowSource: "plan"
+      });
+    }
+    assert.throws(() => windowsToSqlPayload(stationDays), WindowLimitError);
+  });
+
+  it("bindPlanWindowParams matches row count", () => {
+    const bound: string[] = [];
+    bindPlanWindowParams(
+      { input(name: string) { bound.push(name); } },
+      sql,
+      [{ station: "SMD", winStart: "2026-01-01T09:00:00", winEnd: "2026-01-02T09:00:00" }]
+    );
+    assert.deepEqual(bound, ["w0_st", "w0_ws", "w0_we"]);
   });
 });

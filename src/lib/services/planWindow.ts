@@ -225,9 +225,65 @@ export async function getPlanWindowsForDate(
   return getPlanWindowsForRange(reportDate, reportDate, stations);
 }
 
-/** Flatten station-day windows into SQL OPENJSON payload + outer StartTime bounds. */
+/** Max windows per query (3 params each); stay under SQL Server 2100-param limit. */
+export const MAX_PLAN_WINDOWS = 200;
+
+export class WindowLimitError extends Error {
+  constructor(public readonly windowCount: number) {
+    super(`Too many plan windows (${windowCount}); maximum is ${MAX_PLAN_WINDOWS}`);
+    this.name = "WindowLimitError";
+  }
+}
+
+export type PlanWindowSqlRow = {
+  station: string;
+  winStart: string;
+  winEnd: string;
+};
+
+type SqlInputRequest = {
+  input: (name: string, type: unknown, value: unknown) => void;
+};
+
+/** SQL 2012–compatible derived table (replaces OPENJSON, which needs compat 130+). */
+export function buildWindowsValuesSql(rowCount: number): string {
+  if (rowCount < 1) {
+    throw new Error("buildWindowsValuesSql requires at least one window row");
+  }
+  const tuples = Array.from(
+    { length: rowCount },
+    (_, i) =>
+      `(@w${i}_st, CONVERT(datetime, @w${i}_ws, 126), CONVERT(datetime, @w${i}_we, 126))`
+  ).join(",\n    ");
+  return `(VALUES\n    ${tuples}\n  ) AS w(station, winStart, winEnd)`;
+}
+
+/** Bind window rows as parameters and return the VALUES join fragment for `attachPlanWindows`. */
+export function bindPlanWindowParams(
+  request: SqlInputRequest,
+  sqlTypes: { NVarChar: unknown },
+  rows: readonly PlanWindowSqlRow[]
+): void {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    request.input(`w${i}_st`, sqlTypes.NVarChar, row.station);
+    request.input(`w${i}_ws`, sqlTypes.NVarChar, row.winStart);
+    request.input(`w${i}_we`, sqlTypes.NVarChar, row.winEnd);
+  }
+}
+
+export function attachPlanWindows(
+  request: SqlInputRequest,
+  sqlTypes: { NVarChar: unknown },
+  rows: readonly PlanWindowSqlRow[]
+): string {
+  bindPlanWindowParams(request, sqlTypes, rows);
+  return buildWindowsValuesSql(rows.length);
+}
+
+/** Flatten station-day windows into parameterized VALUES rows + outer StartTime bounds. */
 export function windowsToSqlPayload(stationDays: StationDayWindows[]): {
-  json: string;
+  rows: PlanWindowSqlRow[];
   /** Local wall-clock strings for SQL CONVERT — avoids mssql useUTC shifting. */
   boundStart: string;
   boundEnd: string;
@@ -282,11 +338,15 @@ export function windowsToSqlPayload(stationDays: StationDayWindows[]): {
   // Allow events that started shortly before a window but overlap it (clip in SQL)
   const boundStartWide = new Date(boundStart.getTime() - 24 * 60 * 60 * 1000);
 
+  if (flat.length > MAX_PLAN_WINDOWS) {
+    throw new WindowLimitError(flat.length);
+  }
+
   const windowSource: PlanWindowMeta["windowSource"] =
     sources.size === 1 ? [...sources][0]! : "mixed";
 
   return {
-    json: JSON.stringify(flat),
+    rows: flat,
     boundStart: toSqlDateTimeLocal(boundStartWide),
     boundEnd: toSqlDateTimeLocal(boundEnd),
     meta: { windowSource, windows: metaWindows }
@@ -303,15 +363,6 @@ export const CLIPPED_MINUTES_SQL = `
       THEN DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime)
       ELSE w.winEnd
     END
-  )
-`.trim();
-
-export const WINDOWS_OPENJSON_SQL = `
-  OPENJSON(@windowsJson)
-  WITH (
-    station nvarchar(32) '$.station',
-    winStart datetime '$.winStart',
-    winEnd datetime '$.winEnd'
   )
 `.trim();
 

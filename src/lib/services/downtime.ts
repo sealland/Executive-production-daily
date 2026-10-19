@@ -10,7 +10,7 @@ import { buildDowntimeConditions } from "@/lib/query/downtimeFilters";
 import { previousDay, resolvePeriod } from "@/lib/calc/periods";
 import {
   CLIPPED_MINUTES_SQL,
-  WINDOWS_OPENJSON_SQL,
+  attachPlanWindows,
   getPlanWindowsForRange,
   windowsToSqlPayload
 } from "@/lib/services/planWindow";
@@ -35,10 +35,10 @@ async function sumClippedMinutes(
   stationDays: Awaited<ReturnType<typeof getPlanWindowsForRange>>
 ): Promise<number> {
   if (!stationDays.length) return 0;
-  const { json, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
+  const { rows, boundStart, boundEnd } = windowsToSqlPayload(stationDays);
   const pool = await getDowntimePool();
   const request = pool.request();
-  request.input("windowsJson", sql.NVarChar, json);
+  const windowsSql = attachPlanWindows(request, sql, rows);
   request.input("boundStart", sql.NVarChar, boundStart);
   request.input("boundEnd", sql.NVarChar, boundEnd);
   const filterConds = buildDowntimeConditions(request, filters, "d");
@@ -49,7 +49,7 @@ async function sumClippedMinutes(
     FROM (
       SELECT ${CLIPPED_MINUTES_SQL} AS clippedMinutes
       FROM ${table} d
-      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      INNER JOIN ${windowsSql}
         ON LTRIM(RTRIM(d.Station)) = w.station
        AND d.StartTime < w.winEnd
        AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
@@ -100,9 +100,9 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
     sumClippedMinutes(table, filters, prevDays)
   ]);
 
-  const { json, boundStart, boundEnd } = windowsToSqlPayload(rangeDays);
+  const { rows, boundStart, boundEnd } = windowsToSqlPayload(rangeDays);
   const rangeReq = pool.request();
-  rangeReq.input("windowsJson", sql.NVarChar, json);
+  const rangeWindowsSql = attachPlanWindows(rangeReq, sql, rows);
   rangeReq.input("boundStart", sql.NVarChar, boundStart);
   rangeReq.input("boundEnd", sql.NVarChar, boundEnd);
   const rangeConds = buildDowntimeConditions(rangeReq, filters, "d");
@@ -115,7 +115,7 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
         d.[Group] AS downtimeGroup,
         ${CLIPPED_MINUTES_SQL} AS clippedMinutes
       FROM ${table} d
-      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      INNER JOIN ${rangeWindowsSql}
         ON LTRIM(RTRIM(d.Station)) = w.station
        AND d.StartTime < w.winEnd
        AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
@@ -128,7 +128,7 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
   `);
 
   const reasonReq = pool.request();
-  reasonReq.input("windowsJson", sql.NVarChar, json);
+  const reasonWindowsSql = attachPlanWindows(reasonReq, sql, rows);
   reasonReq.input("boundStart", sql.NVarChar, boundStart);
   reasonReq.input("boundEnd", sql.NVarChar, boundEnd);
   const reasonConds = buildDowntimeConditions(reasonReq, filters, "d");
@@ -146,7 +146,7 @@ export async function getDowntimeSummary(filters: DashboardFilters): Promise<Dow
         ISNULL(NULLIF(LTRIM(RTRIM(d.Problem)), ''), ISNULL(d.Cause, 'ไม่ระบุ')) AS problem,
         ${CLIPPED_MINUTES_SQL} AS clippedMinutes
       FROM ${table} d
-      INNER JOIN ${WINDOWS_OPENJSON_SQL} w
+      INNER JOIN ${reasonWindowsSql}
         ON LTRIM(RTRIM(d.Station)) = w.station
        AND d.StartTime < w.winEnd
        AND DATEADD(minute, ISNULL(d.Minute, 0), d.StartTime) > w.winStart
