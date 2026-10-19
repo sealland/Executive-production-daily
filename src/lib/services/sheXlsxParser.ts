@@ -118,14 +118,23 @@ function pickDataSheetName(sheetNames: string[]): string | null {
 }
 
 function loadDataSheet(buffer: Buffer): XLSX.WorkSheet | null {
-  const meta = XLSX.read(buffer, { type: "buffer", bookSheets: true });
+  const meta = XLSX.read(buffer, {
+    type: "buffer",
+    bookSheets: true,
+    cellStyles: false,
+    cellHTML: false,
+    cellFormula: false
+  });
   const candidate = pickDataSheetName(meta.SheetNames);
   if (!candidate) return null;
 
   const readOpts = {
     type: "buffer" as const,
     sheets: [candidate],
-    sheetRows: SHE_MAX_DATA_ROWS + 30
+    sheetRows: SHE_MAX_DATA_ROWS + 30,
+    cellStyles: false,
+    cellHTML: false,
+    cellFormula: false
   };
   if (candidate === SHE_DATA_SHEET_EXACT) {
     const wb = XLSX.read(buffer, readOpts);
@@ -193,7 +202,7 @@ export function parseSheWorkbook(buffer: Buffer): SheParseResult {
   const iDept = colIndex(header, "แผนก");
 
   let dataRows = 0;
-  for (let r = headerIdx + 1; r < grid.length && dataRows < SHE_MAX_DATA_ROWS; r += 1) {
+  for (let r = headerIdx + 1; r < grid.length; r += 1) {
     const line = grid[r];
     if (!line || line.every((c) => c == null || trimCell(c) === "")) continue;
     const noRaw = line[iNo];
@@ -201,6 +210,9 @@ export function parseSheWorkbook(buffer: Buffer): SheParseResult {
     if (!Number.isFinite(incidentNo)) continue;
     if (isDateRowBlank(line, iDay, iMonth, iYear)) continue;
     dataRows += 1;
+    if (dataRows > SHE_MAX_DATA_ROWS) {
+      throw new Error("File exceeds 500 data row limit");
+    }
 
     const detailFull = iDetail >= 0 ? trimCell(line[iDetail]) : "";
     const incidentCategory = iIncidentCat >= 0 ? trimCell(line[iIncidentCat]) : "";

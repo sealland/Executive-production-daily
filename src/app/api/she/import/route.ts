@@ -1,6 +1,11 @@
 import { jsonError, jsonOk } from "@/lib/api/http";
 import { InvalidEmployeeError, requireEmployee } from "@/lib/services/employee";
 import { assertSheImportEnabled, assertSheUploader } from "@/lib/services/sheDbLocal";
+import {
+  assertSheImportOrigin,
+  requireSheUploadSession,
+  SheAuthError
+} from "@/lib/services/sheAuth";
 import { importSheXlsxBuffer } from "@/lib/services/sheImport";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -14,13 +19,12 @@ export async function POST(request: Request) {
   try {
     assertSheImportEnabled();
 
-    const empCode = (request.headers.get("X-Emp-Code") || "").trim();
-    if (!empCode) {
-      return jsonError("X-Emp-Code header is required", 403);
-    }
+    const session = requireSheUploadSession(request);
+    const empCode = session.empCode;
 
-    await requireEmployee(empCode);
     assertSheUploader(empCode);
+    await requireEmployee(empCode);
+    assertSheImportOrigin(request);
 
     const contentLengthHeader = request.headers.get("content-length");
     if (contentLengthHeader == null || contentLengthHeader.trim() === "") {
@@ -54,6 +58,9 @@ export async function POST(request: Request) {
       fileYear: result.fileYear
     });
   } catch (error) {
+    if (error instanceof SheAuthError) {
+      return jsonError(error.message, error.status);
+    }
     if (error instanceof InvalidEmployeeError) {
       return jsonError("ไม่พบรหัสพนักงานนี้ หรือพนักงานไม่ได้อยู่ในสถานะทำงาน", 403, error);
     }

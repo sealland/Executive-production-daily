@@ -977,6 +977,9 @@
     var sheUploadBtn = document.getElementById("sheUploadBtn");
     var sheUploadInput = document.getElementById("sheUploadInput");
     var sheUploadMsg = document.getElementById("sheUploadMsg");
+    var sheLogoutBtn = document.getElementById("sheLogoutBtn");
+    var sheAuthCode = document.getElementById("sheAuthCode");
+    var sheAuthPin = document.getElementById("sheAuthPin");
     var sheKpiLtiChip = document.getElementById("sheKpiLti");
     var sheKpiTri = document.getElementById("sheKpiTri");
     var sheKpiLtiYtd = document.getElementById("sheKpiLtiYtd");
@@ -1078,33 +1081,92 @@
     }
     loadSheSummary();
 
+    function sheUploadErrorMessage(status, data) {
+      if (status === 401) return data.message || "ต้องยืนยันตัวตนก่อนอัปโหลด — ตรวจรหัสพนักงานและรหัสผ่านอัปโหลด";
+      if (status === 403) return data.message || "ไม่มีสิทธิ์อัปโหลดไฟล์ SHE";
+      return data.message || "อัปโหลดไม่สำเร็จ";
+    }
+
+    // shortcut: login state is kept in this page only (session cookie is httpOnly); a reload shows the button hidden until the next upload login.
+    function setSheLoggedIn(on) {
+      if (sheLogoutBtn) sheLogoutBtn.hidden = !on;
+    }
+
+    if (sheLogoutBtn) {
+      sheLogoutBtn.addEventListener("click", function () {
+        fetch("/api/she/auth", { method: "DELETE", credentials: "same-origin" })
+          .catch(function () { return null; })
+          .then(function () {
+            setSheLoggedIn(false);
+            if (sheUploadMsg) {
+              sheUploadMsg.textContent = "ออกจากระบบแล้ว";
+              sheUploadMsg.className = "she-upload-msg";
+            }
+          });
+      });
+    }
+
+    function runSheImport(file) {
+      var body = new FormData();
+      body.append("file", file);
+      return fetch("/api/she/import", {
+        method: "POST",
+        credentials: "same-origin",
+        body: body
+      }).then(function (r) {
+        return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+      });
+    }
+
     if (sheUploadBtn && sheUploadInput) {
       sheUploadBtn.addEventListener("click", function () { sheUploadInput.click(); });
       sheUploadInput.addEventListener("change", function () {
-        if (!currentUser || !sheUploadInput.files || !sheUploadInput.files[0]) return;
+        if (!sheUploadInput.files || !sheUploadInput.files[0]) return;
         var file = sheUploadInput.files[0];
-        sheUploadMsg.textContent = "กำลังอัปโหลด…";
+        var code = sheAuthCode && sheAuthCode.value ? sheAuthCode.value.trim() : "";
+        var pin = sheAuthPin && sheAuthPin.value ? sheAuthPin.value : "";
+        if (!code || !pin) {
+          sheUploadMsg.textContent = "กรอกรหัสพนักงานและรหัสผ่านอัปโหลดก่อนเลือกไฟล์";
+          sheUploadMsg.className = "she-upload-msg err";
+          sheUploadInput.value = "";
+          return;
+        }
+        sheUploadMsg.textContent = "กำลังยืนยันตัวตน…";
         sheUploadMsg.className = "she-upload-msg";
-        var body = new FormData();
-        body.append("file", file);
-        fetch("/api/she/import", {
+        fetch("/api/she/auth", {
           method: "POST",
-          headers: { "X-Emp-Code": currentUser.code },
-          body: body
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: code, pin: pin })
         })
-          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-          .then(function (res) {
-            sheUploadInput.value = "";
-            if (!res.ok) {
-              sheUploadMsg.textContent = res.data.message || "อัปโหลดไม่สำเร็จ";
+          .then(function (r) {
+            return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+          })
+          .then(function (authRes) {
+            if (!authRes.ok) {
+              setSheLoggedIn(false);
+              sheUploadInput.value = "";
+              sheUploadMsg.textContent = sheUploadErrorMessage(authRes.status, authRes.data);
               sheUploadMsg.className = "she-upload-msg err";
               return;
             }
-            sheUploadMsg.textContent = "นำเข้า " + (res.data.imported || 0) + " แถว (ตัดออก " + (res.data.excludedCount || 0) + ")";
-            loadSheSummary();
-            loadLti();
+            setSheLoggedIn(true);
+            sheUploadMsg.textContent = "กำลังอัปโหลด…";
+            return runSheImport(file).then(function (res) {
+              sheUploadInput.value = "";
+              if (res.status === 401) setSheLoggedIn(false);
+              if (!res.ok) {
+                sheUploadMsg.textContent = sheUploadErrorMessage(res.status, res.data);
+                sheUploadMsg.className = "she-upload-msg err";
+                return;
+              }
+              sheUploadMsg.textContent = "นำเข้า " + (res.data.imported || 0) + " แถว (ตัดออก " + (res.data.excludedCount || 0) + ")";
+              loadSheSummary();
+              loadLti();
+            });
           })
           .catch(function () {
+            sheUploadInput.value = "";
             sheUploadMsg.textContent = "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ";
             sheUploadMsg.className = "she-upload-msg err";
           });

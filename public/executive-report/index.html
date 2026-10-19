@@ -501,8 +501,11 @@
     <div class="she-xls-head">
       <span class="she-source-badge" id="sheSourceBadge">Source: SHE Excel</span>
       <div class="she-upload-row" id="sheUploadRow" hidden>
+        <input type="text" id="sheAuthCode" class="she-auth-input" placeholder="รหัสพนักงาน" autocomplete="username" inputmode="numeric">
+        <input type="password" id="sheAuthPin" class="she-auth-input" placeholder="รหัสผ่านอัปโหลด" autocomplete="current-password">
         <input type="file" id="sheUploadInput" accept=".xlsx" hidden>
         <button class="btn" type="button" id="sheUploadBtn">อัปโหลด Excel SHE</button>
+        <button class="btn" type="button" id="sheLogoutBtn" hidden>ออกจากระบบ</button>
         <span class="she-upload-msg" id="sheUploadMsg"></span>
       </div>
     </div>
@@ -590,7 +593,7 @@
     </div>
   </section>
 
-  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.4.3 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
+  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.5.0 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
 </div>
 
 <div class="print-summary" id="printSummary">

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as XLSX from "xlsx";
-import { parseSheWorkbook, thaiDateToIso } from "./sheXlsxParser";
+import {
+  assertXlsxBuffer,
+  parseSheWorkbook,
+  SHE_MAX_DATA_ROWS,
+  thaiDateToIso
+} from "./sheXlsxParser";
 
 describe("thaiDateToIso", () => {
   it("converts BE date to CE ISO", () => {
@@ -190,5 +195,27 @@ describe("parseSheWorkbook", () => {
     const result = parseSheWorkbook(buffer);
     assert.equal(result.rows.length, 0);
     assert.deepEqual(result.stats.skippedInvalidDate, [11]);
+  });
+
+  it("rejects more than SHE_MAX_DATA_ROWS data rows", () => {
+    const header = ["NO.", "รายละเอียดอุบัติเหตุ", "วัน", "เดือน", "ปี", "สาขา", "ประเภท2"];
+    const rows: (string | number | null)[][] = [[], header];
+    for (let i = 1; i <= SHE_MAX_DATA_ROWS + 1; i += 1) {
+      rows.push([i, "detail", 1, "มกราคม", 2569, "MR7", "Near Miss"]);
+    }
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "DATA ");
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    assert.throws(() => parseSheWorkbook(buffer), /500 data row/);
+  });
+});
+
+describe("assertXlsxBuffer", () => {
+  it("rejects buffers over 10 MB", () => {
+    const big = Buffer.alloc(10 * 1024 * 1024 + 1);
+    big[0] = 0x50;
+    big[1] = 0x4b;
+    assert.throws(() => assertXlsxBuffer(big, "big.xlsx"), /10 MB/);
   });
 });
