@@ -1,0 +1,15 @@
+{
+  "plantByBranch": {
+    "MR7": "RMD7",
+    "MR8": "RMD8",
+    "MSM": "MSM"
+  },
+  "plantDefault": "Other",
+  "type2ToKpi": {
+    "TRI": "TRI",
+    "LTI": "LTI",
+    "First Aid": "First Aid",
+    "Near Miss": "Near Miss",
+    "PD": "PD"
+  }
+}

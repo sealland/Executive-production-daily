@@ -41,3 +41,42 @@ export interface SheIncidentHistoryEntry {
   editedBy: EmployeeInfo;
   editedAt: string;
 }
+
+export interface SheSummaryIncident {
+  incidentNo: number;
+  occurredDate: string;
+  plant: string;
+  category: string;
+  severity: string | null;
+  detailShort: string | null;
+}
+
+export interface ShePlantCount {
+  plant: string;
+  count: number;
+}
+
+export interface SheMonthCategoryCount {
+  month: number;
+  category: string;
+  count: number;
+}
+
+export interface SheSummaryResponse {
+  asOfDate: string;
+  lastImportedAt: string | null;
+  lastImportedBy: string | null;
+  dataThroughDate: string | null;
+  ytd: Record<string, number>;
+  mtd: Record<string, number>;
+  day: Record<string, number>;
+  byPlantYtd: ShePlantCount[];
+  byMonthYtd: SheMonthCategoryCount[];
+  latestIncidents: SheSummaryIncident[];
+}
+
+export interface LtiStatusSource {
+  source: "manual" | "excel" | "none";
+}
+
+export type LtiStatusWithSource = LtiStatus & LtiStatusSource;

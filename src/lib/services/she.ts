@@ -1,9 +1,11 @@
 import { getCeoPool, sql } from "@/lib/db/ceo";
 import { requireEmployee } from "@/lib/services/employee";
+import { getLatestLtiFromImport } from "@/lib/services/sheSummary";
 import type {
   IncidentStatus,
   LtiHistoryEntry,
   LtiStatus,
+  LtiStatusWithSource,
   SheIncident,
   SheIncidentHistoryEntry
 } from "@/lib/types/she";
@@ -22,7 +24,7 @@ function toIsoDate(value: unknown): string {
 
 // ---------------- Days without LTI ----------------
 
-export async function getLtiStatus(asOfDate: string): Promise<LtiStatus> {
+export async function getLtiStatus(asOfDate: string): Promise<LtiStatusWithSource> {
   const pool = await getCeoPool();
   const result = await pool.request().query(`
     SELECT TOP 1 last_lti_date, updated_by_code, updated_by_name, updated_by_position, updated_at
@@ -38,16 +40,41 @@ export async function getLtiStatus(asOfDate: string): Promise<LtiStatus> {
         updated_at: string;
       }
     | undefined;
-  if (!row) {
-    return { lastLtiDate: null, daysWithoutLti: null, updatedBy: null, updatedAt: null };
+
+  const manual = row
+    ? {
+        lastLtiDate: toIsoDate(row.last_lti_date),
+        daysWithoutLti: daysBetween(toIsoDate(row.last_lti_date), asOfDate),
+        updatedBy: {
+          code: row.updated_by_code,
+          name: row.updated_by_name || row.updated_by_code,
+          position: row.updated_by_position
+        },
+        updatedAt: row.updated_at,
+        source: "manual" as const
+      }
+    : null;
+
+  const excel = await getLatestLtiFromImport(asOfDate);
+  const excelStatus: LtiStatusWithSource | null = excel.lastLtiDate
+    ? {
+        lastLtiDate: excel.lastLtiDate,
+        daysWithoutLti: daysBetween(excel.lastLtiDate, asOfDate),
+        updatedBy: null,
+        updatedAt: excel.lastImportedAt,
+        source: "excel"
+      }
+    : null;
+
+  if (manual && excelStatus) {
+    const manualAt = new Date(manual.updatedAt || 0).getTime();
+    const importAt = new Date(excel.lastImportedAt || 0).getTime();
+    if (manualAt > importAt) return manual;
+    return excelStatus;
   }
-  const lastLtiDate = toIsoDate(row.last_lti_date);
-  return {
-    lastLtiDate,
-    daysWithoutLti: daysBetween(lastLtiDate, asOfDate),
-    updatedBy: { code: row.updated_by_code, name: row.updated_by_name || row.updated_by_code, position: row.updated_by_position },
-    updatedAt: row.updated_at
-  };
+  if (manual) return manual;
+  if (excelStatus) return excelStatus;
+  return { lastLtiDate: null, daysWithoutLti: null, updatedBy: null, updatedAt: null, source: "none" };
 }
 
 export async function updateLtiDate(lastLtiDate: string, empCode: string, asOfDate: string): Promise<LtiStatus> {

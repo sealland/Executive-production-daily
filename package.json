@@ -1,13 +1,14 @@
 {
   "name": "production-report",
-  "version": "0.3.0",
+  "version": "0.4.2",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3010",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx --yes tsx --test src/lib/services/planWindow.test.ts src/lib/services/rmd7RmUsed.test.ts",
+    "test": "tsx --test src/lib/services/planWindow.test.ts src/lib/services/rmd7RmUsed.test.ts src/lib/services/sheXlsxParser.test.ts",
+    "she:import": "tsx scripts/import-she-xlsx.ts",
     "db:inspect": "node scripts/inspect-db.js",
     "cpp:sync": "node scripts/sync-cpp-targets.js",
     "rm:sync": "node scripts/sync-rm-weight.js",
@@ -32,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "tailwindcss": "^4",
+    "tsx": "4.20.6",
     "typescript": "^5"
   }
 }

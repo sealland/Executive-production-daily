@@ -972,6 +972,145 @@
     var escapeHtml = ZB.escapeHtml, fmtDateTime = ZB.fmtDateTime;
     var currentUser = null;
 
+    var sheSourceBadge = document.getElementById("sheSourceBadge");
+    var sheUploadRow = document.getElementById("sheUploadRow");
+    var sheUploadBtn = document.getElementById("sheUploadBtn");
+    var sheUploadInput = document.getElementById("sheUploadInput");
+    var sheUploadMsg = document.getElementById("sheUploadMsg");
+    var sheKpiLtiChip = document.getElementById("sheKpiLti");
+    var sheKpiTri = document.getElementById("sheKpiTri");
+    var sheKpiLtiYtd = document.getElementById("sheKpiLtiYtd");
+    var sheKpiNear = document.getElementById("sheKpiNear");
+    var sheKpiPd = document.getElementById("sheKpiPd");
+    var sheChartWrap = document.getElementById("sheChartWrap");
+    var sheMonthlyChart = document.getElementById("sheMonthlyChart");
+    var shePlantChips = document.getElementById("shePlantChips");
+    var sheLatestWrap = document.getElementById("sheLatestWrap");
+    var sheLatestList = document.getElementById("sheLatestList");
+
+    var SHE_KPI_KEYS = ["TRI", "LTI", "First Aid", "Near Miss", "PD"];
+    var TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "ม.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+    function fmtCount(map, key) {
+      if (!map || map[key] == null) return "–";
+      return String(map[key]);
+    }
+
+    function segClass(cat) {
+      if (cat === "TRI") return "tri";
+      if (cat === "LTI") return "lti";
+      if (cat === "First Aid") return "fa";
+      if (cat === "Near Miss") return "nm";
+      return "pd";
+    }
+
+    function renderSheSummary(summary) {
+      if (!summary || !summary.lastImportedAt) {
+        sheSourceBadge.textContent = "Source: SHE Excel · ยังไม่มีข้อมูล";
+        sheChartWrap.hidden = true;
+        sheLatestWrap.hidden = true;
+        sheKpiTri.textContent = sheKpiLtiYtd.textContent = sheKpiNear.textContent = sheKpiPd.textContent = "–";
+        return;
+      }
+      var through = summary.dataThroughDate || "–";
+      var imported = summary.lastImportedAt ? fmtDateTime(summary.lastImportedAt) : "–";
+      var badge = "Source: SHE Excel · ถึง " + through + " · import " + imported;
+      if (summary.lastImportedBy) {
+        badge += " · upload โดย " + summary.lastImportedBy + " เมื่อ " + imported;
+      }
+      sheSourceBadge.textContent = badge;
+      sheKpiTri.textContent = fmtCount(summary.ytd, "TRI");
+      sheKpiLtiYtd.textContent = fmtCount(summary.ytd, "LTI");
+      sheKpiNear.textContent = fmtCount(summary.ytd, "Near Miss");
+      sheKpiPd.textContent = fmtCount(summary.ytd, "PD");
+
+      var year = Number(REPORT_DATE.slice(0, 4));
+      var endMonth = Number(REPORT_DATE.slice(5, 7));
+      var byMonth = {};
+      (summary.byMonthYtd || []).forEach(function (row) {
+        if (!byMonth[row.month]) byMonth[row.month] = {};
+        byMonth[row.month][row.category] = row.count;
+      });
+      var maxTotal = 0;
+      for (var m = 1; m <= endMonth; m += 1) {
+        var t = 0;
+        SHE_KPI_KEYS.forEach(function (k) { t += (byMonth[m] && byMonth[m][k]) || 0; });
+        if (t > maxTotal) maxTotal = t;
+      }
+      var chartHtml = "";
+      for (var mo = 1; mo <= endMonth; mo += 1) {
+        var monthTotal = 0;
+        var segs = "";
+        SHE_KPI_KEYS.forEach(function (k) {
+          var c = (byMonth[mo] && byMonth[mo][k]) || 0;
+          monthTotal += c;
+          if (c > 0) {
+            var h = maxTotal ? Math.max(4, Math.round((c / maxTotal) * 100)) : 4;
+            segs += '<div class="she-chart-seg ' + segClass(k) + '" style="height:' + h + 'px" title="' + escapeHtml(k) + ": " + c + '"></div>';
+          }
+        });
+        chartHtml += '<div class="she-chart-col"><div class="she-chart-stack">' + (segs || '<div class="she-chart-seg" style="height:2px;opacity:0.2"></div>') + '</div><span class="she-chart-lbl">' + TH_MONTHS[mo - 1] + (monthTotal ? " (" + monthTotal + ")" : "") + "</span></div>";
+      }
+      sheMonthlyChart.innerHTML = chartHtml;
+      sheChartWrap.hidden = !chartHtml;
+
+      shePlantChips.innerHTML = (summary.byPlantYtd || []).map(function (p) {
+        return '<span class="she-plant-chip">' + escapeHtml(p.plant) + ": " + p.count + "</span>";
+      }).join("");
+
+      var latest = summary.latestIncidents || [];
+      sheLatestList.innerHTML = latest.length
+        ? latest.map(function (row) {
+          return "<li><b>" + escapeHtml(row.occurredDate) + "</b> · " + escapeHtml(row.plant) + " · " + escapeHtml(row.category) +
+            (row.severity ? " · " + escapeHtml(row.severity) : "") +
+            (row.detailShort ? '<span class="she-latest-detail">' + escapeHtml(row.detailShort) + "</span>" : "") +
+            "</li>";
+        }).join("")
+        : '<li class="she-empty">ไม่มีเหตุการณ์</li>';
+      sheLatestWrap.hidden = false;
+    }
+
+    function loadSheSummary() {
+      fetch("/api/she/summary?date=" + REPORT_DATE)
+        .then(function (r) { return r.json(); })
+        .then(function (data) { renderSheSummary(data.summary); })
+        .catch(function () { sheSourceBadge.textContent = "Source: SHE Excel · โหลดไม่สำเร็จ"; });
+    }
+    loadSheSummary();
+
+    if (sheUploadBtn && sheUploadInput) {
+      sheUploadBtn.addEventListener("click", function () { sheUploadInput.click(); });
+      sheUploadInput.addEventListener("change", function () {
+        if (!currentUser || !sheUploadInput.files || !sheUploadInput.files[0]) return;
+        var file = sheUploadInput.files[0];
+        sheUploadMsg.textContent = "กำลังอัปโหลด…";
+        sheUploadMsg.className = "she-upload-msg";
+        var body = new FormData();
+        body.append("file", file);
+        fetch("/api/she/import", {
+          method: "POST",
+          headers: { "X-Emp-Code": currentUser.code },
+          body: body
+        })
+          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (res) {
+            sheUploadInput.value = "";
+            if (!res.ok) {
+              sheUploadMsg.textContent = res.data.message || "อัปโหลดไม่สำเร็จ";
+              sheUploadMsg.className = "she-upload-msg err";
+              return;
+            }
+            sheUploadMsg.textContent = "นำเข้า " + (res.data.imported || 0) + " แถว (ตัดออก " + (res.data.excludedCount || 0) + ")";
+            loadSheSummary();
+            loadLti();
+          })
+          .catch(function () {
+            sheUploadMsg.textContent = "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ";
+            sheUploadMsg.className = "she-upload-msg err";
+          });
+      });
+    }
+
     var ltiValueEl = document.getElementById("ltiValue");
     var ltiMetaEl = document.getElementById("ltiMeta");
     var ltiDateInput = document.getElementById("ltiDateInput");
@@ -981,6 +1120,10 @@
     var lastLtiDate = null;
 
     function renderLtiMeta(status) {
+      if (status && status.source === "excel") {
+        ltiMetaEl.textContent = "คำนวณจาก Excel SHE" + (status.updatedAt ? " · import " + fmtDateTime(status.updatedAt) : "");
+        return;
+      }
       if (!status || !status.updatedBy) {
         ltiMetaEl.textContent = "ยังไม่มีการบันทึกจากระบบ";
         return;
@@ -994,7 +1137,9 @@
       window.__zbPrintData = window.__zbPrintData || {};
       window.__zbPrintData.ltiStatus = status;
       lastLtiDate = status.lastLtiDate;
-      ltiValueEl.textContent = status.daysWithoutLti == null ? "–" : status.daysWithoutLti;
+      var daysText = status.daysWithoutLti == null ? "–" : status.daysWithoutLti;
+      ltiValueEl.textContent = daysText;
+      if (sheKpiLtiChip) sheKpiLtiChip.textContent = daysText;
       ltiDateInput.value = status.lastLtiDate || "";
       ltiMetaEl.classList.remove("saving", "err");
       renderLtiMeta(status);
@@ -1229,6 +1374,7 @@
       currentUser = user;
       ltiDateInput.disabled = !user;
       sheAddBtn.hidden = !user;
+      if (sheUploadRow) sheUploadRow.hidden = !user;
       renderIncidents();
     });
   })();
