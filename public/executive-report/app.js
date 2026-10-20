@@ -977,10 +977,8 @@
     var sheUploadBtn = document.getElementById("sheUploadBtn");
     var sheUploadInput = document.getElementById("sheUploadInput");
     var sheUploadMsg = document.getElementById("sheUploadMsg");
-    var sheLogoutBtn = document.getElementById("sheLogoutBtn");
-    var sheAuthCode = document.getElementById("sheAuthCode");
-    var sheAuthPin = document.getElementById("sheAuthPin");
-    var sheKpiLtiChip = document.getElementById("sheKpiLti");
+    var sheUploadEmpCode = normalizeSheUploadEmpCode(new URLSearchParams(window.location.search).get("currentUser"));
+    var hasSheExcel = false;
     var sheKpiTri = document.getElementById("sheKpiTri");
     var sheKpiLtiYtd = document.getElementById("sheKpiLtiYtd");
     var sheKpiNear = document.getElementById("sheKpiNear");
@@ -993,6 +991,40 @@
 
     var SHE_KPI_KEYS = ["TRI", "LTI", "First Aid", "Near Miss", "PD"];
     var TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "ม.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+    function normalizeSheUploadEmpCode(raw) {
+      if (!raw) return "";
+      var code = raw.trim();
+      if (!code || code.length > 64) return "";
+      return code;
+    }
+
+    function updateManualSheUi() {
+      var list = document.getElementById("sheList");
+      var addBtn = document.getElementById("sheAddBtn");
+      if (hasSheExcel) {
+        if (list) list.hidden = true;
+        if (addBtn) addBtn.hidden = true;
+        return;
+      }
+      if (list) list.hidden = false;
+      if (addBtn) addBtn.hidden = !currentUser;
+    }
+
+    function refreshSheUploadVisibility() {
+      if (!sheUploadRow) return;
+      sheUploadRow.hidden = true;
+      if (!sheUploadEmpCode) return;
+      fetch("/api/she/auth/eligibility?currentUser=" + encodeURIComponent(sheUploadEmpCode), { credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) return null;
+          return r.json();
+        })
+        .then(function (data) {
+          if (data && data.canUpload === true) sheUploadRow.hidden = false;
+        })
+        .catch(function () { /* fail closed */ });
+    }
 
     function fmtCount(map, key) {
       if (!map || map[key] == null) return "–";
@@ -1008,6 +1040,8 @@
     }
 
     function renderSheSummary(summary) {
+      hasSheExcel = !!(summary && summary.lastImportedAt);
+      updateManualSheUi();
       if (!summary || !summary.lastImportedAt) {
         sheSourceBadge.textContent = "Source: SHE Excel · ยังไม่มีข้อมูล";
         sheChartWrap.hidden = true;
@@ -1082,34 +1116,16 @@
     loadSheSummary();
 
     function sheUploadErrorMessage(status, data) {
-      if (status === 401) return data.message || "ต้องยืนยันตัวตนก่อนอัปโหลด — ตรวจรหัสพนักงานและรหัสผ่านอัปโหลด";
+      if (status === 401) return data.message || "ต้องระบุ currentUser ก่อนอัปโหลด";
       if (status === 403) return data.message || "ไม่มีสิทธิ์อัปโหลดไฟล์ SHE";
       return data.message || "อัปโหลดไม่สำเร็จ";
-    }
-
-    // shortcut: login state is kept in this page only (session cookie is httpOnly); a reload shows the button hidden until the next upload login.
-    function setSheLoggedIn(on) {
-      if (sheLogoutBtn) sheLogoutBtn.hidden = !on;
-    }
-
-    if (sheLogoutBtn) {
-      sheLogoutBtn.addEventListener("click", function () {
-        fetch("/api/she/auth", { method: "DELETE", credentials: "same-origin" })
-          .catch(function () { return null; })
-          .then(function () {
-            setSheLoggedIn(false);
-            if (sheUploadMsg) {
-              sheUploadMsg.textContent = "ออกจากระบบแล้ว";
-              sheUploadMsg.className = "she-upload-msg";
-            }
-          });
-      });
     }
 
     function runSheImport(file) {
       var body = new FormData();
       body.append("file", file);
-      return fetch("/api/she/import", {
+      var url = "/api/she/import?currentUser=" + encodeURIComponent(sheUploadEmpCode);
+      return fetch(url, {
         method: "POST",
         credentials: "same-origin",
         body: body
@@ -1118,52 +1134,32 @@
       });
     }
 
+    refreshSheUploadVisibility();
+
     if (sheUploadBtn && sheUploadInput) {
       sheUploadBtn.addEventListener("click", function () { sheUploadInput.click(); });
       sheUploadInput.addEventListener("change", function () {
         if (!sheUploadInput.files || !sheUploadInput.files[0]) return;
-        var file = sheUploadInput.files[0];
-        var code = sheAuthCode && sheAuthCode.value ? sheAuthCode.value.trim() : "";
-        var pin = sheAuthPin && sheAuthPin.value ? sheAuthPin.value : "";
-        if (!code || !pin) {
-          sheUploadMsg.textContent = "กรอกรหัสพนักงานและรหัสผ่านอัปโหลดก่อนเลือกไฟล์";
+        if (!sheUploadEmpCode) {
+          sheUploadMsg.textContent = "ไม่พบ currentUser ใน URL";
           sheUploadMsg.className = "she-upload-msg err";
           sheUploadInput.value = "";
           return;
         }
-        sheUploadMsg.textContent = "กำลังยืนยันตัวตน…";
+        var file = sheUploadInput.files[0];
+        sheUploadMsg.textContent = "กำลังอัปโหลด…";
         sheUploadMsg.className = "she-upload-msg";
-        fetch("/api/she/auth", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: code, pin: pin })
-        })
-          .then(function (r) {
-            return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
-          })
-          .then(function (authRes) {
-            if (!authRes.ok) {
-              setSheLoggedIn(false);
-              sheUploadInput.value = "";
-              sheUploadMsg.textContent = sheUploadErrorMessage(authRes.status, authRes.data);
+        runSheImport(file)
+          .then(function (res) {
+            sheUploadInput.value = "";
+            if (!res.ok) {
+              sheUploadMsg.textContent = sheUploadErrorMessage(res.status, res.data);
               sheUploadMsg.className = "she-upload-msg err";
               return;
             }
-            setSheLoggedIn(true);
-            sheUploadMsg.textContent = "กำลังอัปโหลด…";
-            return runSheImport(file).then(function (res) {
-              sheUploadInput.value = "";
-              if (res.status === 401) setSheLoggedIn(false);
-              if (!res.ok) {
-                sheUploadMsg.textContent = sheUploadErrorMessage(res.status, res.data);
-                sheUploadMsg.className = "she-upload-msg err";
-                return;
-              }
-              sheUploadMsg.textContent = "นำเข้า " + (res.data.imported || 0) + " แถว (ตัดออก " + (res.data.excludedCount || 0) + ")";
-              loadSheSummary();
-              loadLti();
-            });
+            sheUploadMsg.textContent = "นำเข้า " + (res.data.imported || 0) + " แถว (ตัดออก " + (res.data.excludedCount || 0) + ")";
+            loadSheSummary();
+            loadLti();
           })
           .catch(function () {
             sheUploadInput.value = "";
@@ -1201,8 +1197,10 @@
       lastLtiDate = status.lastLtiDate;
       var daysText = status.daysWithoutLti == null ? "–" : status.daysWithoutLti;
       ltiValueEl.textContent = daysText;
-      if (sheKpiLtiChip) sheKpiLtiChip.textContent = daysText;
       ltiDateInput.value = status.lastLtiDate || "";
+      var ltiFromExcel = status && status.source === "excel";
+      ltiDateInput.hidden = ltiFromExcel;
+      ltiDateInput.disabled = ltiFromExcel || !currentUser;
       ltiMetaEl.classList.remove("saving", "err");
       renderLtiMeta(status);
     }
@@ -1434,9 +1432,12 @@
 
     ZB.currentUserPromise.then(function (user) {
       currentUser = user;
-      ltiDateInput.disabled = !user;
-      sheAddBtn.hidden = !user;
-      if (sheUploadRow) sheUploadRow.hidden = !user;
+      updateManualSheUi();
+      if (window.__zbPrintData && window.__zbPrintData.ltiStatus) {
+        applyLtiStatus(window.__zbPrintData.ltiStatus);
+      } else {
+        ltiDateInput.disabled = !user;
+      }
       renderIncidents();
     });
   })();

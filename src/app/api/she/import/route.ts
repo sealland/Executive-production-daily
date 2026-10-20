@@ -1,9 +1,8 @@
 import { jsonError, jsonOk } from "@/lib/api/http";
-import { InvalidEmployeeError, requireEmployee } from "@/lib/services/employee";
-import { assertSheImportEnabled, assertSheUploader } from "@/lib/services/sheDbLocal";
+import { assertSheImportEnabled } from "@/lib/services/sheDbLocal";
 import {
   assertSheImportOrigin,
-  requireSheUploadSession,
+  authorizeSheImportFromRequest,
   SheAuthError
 } from "@/lib/services/sheAuth";
 import { importSheXlsxBuffer } from "@/lib/services/sheImport";
@@ -19,12 +18,9 @@ export async function POST(request: Request) {
   try {
     assertSheImportEnabled();
 
-    const session = requireSheUploadSession(request);
-    const empCode = session.empCode;
-
-    assertSheUploader(empCode);
-    await requireEmployee(empCode);
     assertSheImportOrigin(request);
+
+    const empCode = await authorizeSheImportFromRequest(request);
 
     const contentLengthHeader = request.headers.get("content-length");
     if (contentLengthHeader == null || contentLengthHeader.trim() === "") {
@@ -60,9 +56,6 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof SheAuthError) {
       return jsonError(error.message, error.status);
-    }
-    if (error instanceof InvalidEmployeeError) {
-      return jsonError("ไม่พบรหัสพนักงานนี้ หรือพนักงานไม่ได้อยู่ในสถานะทำงาน", 403, error);
     }
     const message = error instanceof Error ? error.message : "Import failed";
     return jsonError(message, importForbiddenStatus(message), error);

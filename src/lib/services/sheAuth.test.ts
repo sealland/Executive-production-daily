@@ -5,18 +5,25 @@ import {
   assertSheAuthFieldLengths,
   assertSheImportOrigin,
   authenticateSheUploader,
+  authorizeSheImportFromRequest,
   checkSheAuthCodeRateLimit,
   checkSheAuthRateLimit,
   clearSessionCookieHeader,
   clientIpFromRequest,
   formatShePinHash,
+  normalizeSheCurrentUser,
   resetSheAuthRateLimitForTests,
+  resolveSheImportEmpCode,
+  SHE_IMPORT_FORBIDDEN_MESSAGE,
+  SHE_IMPORT_MISSING_USER_MESSAGE,
   SheAuthError,
   sheAuthSecret,
+  sheUploadCanUpload,
   signSheSessionToken,
   verifySheSessionToken,
   verifySheUploadPin
 } from "./sheAuth";
+import { GET as sheEligibilityGet } from "../../app/api/she/auth/eligibility/route";
 
 const TEST_SECRET = "01234567890123456789012345678901";
 
@@ -164,6 +171,121 @@ describe("sheAuth body and field caps", () => {
     );
     assert.throws(() => assertSheAuthFieldLengths("E001", long), SheAuthError);
     assertSheAuthFieldLengths("x".repeat(64), "y".repeat(64));
+  });
+});
+
+describe("sheAuth currentUser upload (v0.6.0)", () => {
+  const prevEmpcodes = process.env.SHE_UPLOAD_EMPCODES;
+
+  afterEach(() => {
+    resetSheAuthRateLimitForTests();
+    if (prevEmpcodes !== undefined) process.env.SHE_UPLOAD_EMPCODES = prevEmpcodes;
+    else delete process.env.SHE_UPLOAD_EMPCODES;
+  });
+
+  it("normalizeSheCurrentUser trims and caps length at 64", () => {
+    assert.equal(normalizeSheCurrentUser("  TEST0001  "), "TEST0001");
+    assert.equal(normalizeSheCurrentUser(""), null);
+    assert.equal(normalizeSheCurrentUser("x".repeat(65)), null);
+  });
+
+  it("sheUploadCanUpload is true only for allowlisted codes", () => {
+    process.env.SHE_UPLOAD_EMPCODES = "TEST0001,TEST0002";
+    assert.equal(sheUploadCanUpload("TEST0001"), true);
+    assert.equal(sheUploadCanUpload("TEST9999"), false);
+  });
+
+  it("eligibility GET returns only canUpload with no-store", async () => {
+    process.env.SHE_UPLOAD_EMPCODES = "TEST0001";
+    const allowed = await sheEligibilityGet(
+      new Request("https://app.example/api/she/auth/eligibility?currentUser=TEST0001")
+    );
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.headers.get("Cache-Control"), "no-store");
+    const allowedBody = (await allowed.json()) as { canUpload: boolean };
+    assert.equal(Object.keys(allowedBody).length, 1);
+    assert.equal(allowedBody.canUpload, true);
+
+    const denied = await sheEligibilityGet(
+      new Request("https://app.example/api/she/auth/eligibility?currentUser=TEST9999")
+    );
+    const deniedBody = (await denied.json()) as { canUpload: boolean };
+    assert.equal(deniedBody.canUpload, false);
+  });
+
+  it("eligibility GET returns 429 when rate limit exceeded", async () => {
+    process.env.SHE_UPLOAD_EMPCODES = "TEST0001";
+    const ip = "203.0.113.55";
+    let lastStatus = 200;
+    for (let i = 0; i < 6; i += 1) {
+      const res = await sheEligibilityGet(
+        new Request("https://app.example/api/she/auth/eligibility?currentUser=TEST0001", {
+          headers: { "X-Real-IP": ip }
+        })
+      );
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+    const limited = await sheEligibilityGet(
+      new Request("https://app.example/api/she/auth/eligibility?currentUser=TEST0001", {
+        headers: { "X-Real-IP": ip }
+      })
+    );
+    const body = (await limited.json()) as { canUpload: boolean };
+    assert.equal(body.canUpload, false);
+  });
+
+  it("authorizeSheImportFromRequest returns 401 without currentUser", async () => {
+    await assert.rejects(
+      () => authorizeSheImportFromRequest(new Request("https://app.example/api/she/import", { method: "POST" })),
+      (error: unknown) =>
+        error instanceof SheAuthError &&
+        error.status === 401 &&
+        error.message === SHE_IMPORT_MISSING_USER_MESSAGE
+    );
+  });
+
+  it("authorizeSheImportFromRequest returns 403 for code not in allowlist before any DB lookup", async () => {
+    // If lookupEmployee were reached, getCeoPool would fail with a non-SheAuthError (no DB in tests).
+    process.env.SHE_UPLOAD_EMPCODES = "TEST0001";
+    await assert.rejects(
+      () =>
+        authorizeSheImportFromRequest(
+          new Request("https://app.example/api/she/import?currentUser=TEST9999", { method: "POST" })
+        ),
+      (error: unknown) =>
+        error instanceof SheAuthError &&
+        error.status === 403 &&
+        error.message === SHE_IMPORT_FORBIDDEN_MESSAGE
+    );
+    delete process.env.SHE_UPLOAD_EMPCODES;
+  });
+
+  it("resolveSheImportEmpCode returns 403 for allowlist and inactive with same message", () => {
+    process.env.SHE_UPLOAD_EMPCODES = "TEST0001";
+    assert.throws(
+      () => resolveSheImportEmpCode("TEST9999", { code: "TEST9999", name: "X", position: null, username: null }),
+      (error: unknown) =>
+        error instanceof SheAuthError &&
+        error.status === 403 &&
+        error.message === SHE_IMPORT_FORBIDDEN_MESSAGE
+    );
+    assert.throws(
+      () => resolveSheImportEmpCode("TEST0001", null),
+      (error: unknown) =>
+        error instanceof SheAuthError &&
+        error.status === 403 &&
+        error.message === SHE_IMPORT_FORBIDDEN_MESSAGE
+    );
+    assert.equal(
+      resolveSheImportEmpCode("TEST0001", {
+        code: "TEST0001",
+        name: "Test",
+        position: null,
+        username: null
+      }),
+      "TEST0001"
+    );
   });
 });
 

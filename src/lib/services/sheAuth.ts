@@ -8,6 +8,8 @@ const SCRYPT_KEYLEN = 32;
 
 export const AUTH_FAIL_MESSAGE = "รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง";
 export const ORIGIN_FAIL_MESSAGE = "คำขอไม่ได้รับอนุญาต (Origin)";
+export const SHE_IMPORT_MISSING_USER_MESSAGE = "ต้องระบุ currentUser ก่อนอัปโหลด";
+export const SHE_IMPORT_FORBIDDEN_MESSAGE = "ไม่มีสิทธิ์อัปโหลดไฟล์ SHE";
 
 type RateBucket = { count: number; windowStart: number };
 const authRateByIp = new Map<string, RateBucket>();
@@ -255,6 +257,51 @@ export function readSheSessionToken(request: Request): string | null {
     }
   }
   return null;
+}
+
+export function normalizeSheCurrentUser(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const code = raw.trim();
+  if (!code || code.length > SHE_AUTH_MAX_FIELD_CHARS) return null;
+  return code;
+}
+
+export function sheUploadCanUpload(empCode: string): boolean {
+  try {
+    assertSheUploader(empCode);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveSheImportEmpCode(
+  code: string,
+  employee: Awaited<ReturnType<typeof lookupEmployee>>
+): string {
+  try {
+    assertSheUploader(code);
+  } catch {
+    throw new SheAuthError(403, SHE_IMPORT_FORBIDDEN_MESSAGE);
+  }
+  if (!employee) {
+    throw new SheAuthError(403, SHE_IMPORT_FORBIDDEN_MESSAGE);
+  }
+  return employee.code;
+}
+
+export async function authorizeSheImportFromRequest(request: Request): Promise<string> {
+  const { searchParams } = new URL(request.url);
+  const code = normalizeSheCurrentUser(searchParams.get("currentUser"));
+  if (!code) {
+    throw new SheAuthError(401, SHE_IMPORT_MISSING_USER_MESSAGE);
+  }
+  // Env allowlist first: codes not in SHE_UPLOAD_EMPCODES never reach the DB.
+  if (!sheUploadCanUpload(code)) {
+    throw new SheAuthError(403, SHE_IMPORT_FORBIDDEN_MESSAGE);
+  }
+  const employee = await lookupEmployee(code);
+  return resolveSheImportEmpCode(code, employee);
 }
 
 export function requireSheUploadSession(request: Request): VerifiedSheSession {

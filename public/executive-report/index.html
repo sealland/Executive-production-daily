@@ -501,16 +501,14 @@
     <div class="she-xls-head">
       <span class="she-source-badge" id="sheSourceBadge">Source: SHE Excel</span>
       <div class="she-upload-row" id="sheUploadRow" hidden>
-        <input type="text" id="sheAuthCode" class="she-auth-input" placeholder="รหัสพนักงาน" autocomplete="username" inputmode="numeric">
-        <input type="password" id="sheAuthPin" class="she-auth-input" placeholder="รหัสผ่านอัปโหลด" autocomplete="current-password">
         <input type="file" id="sheUploadInput" accept=".xlsx" hidden>
-        <button class="btn" type="button" id="sheUploadBtn">อัปโหลด Excel SHE</button>
-        <button class="btn" type="button" id="sheLogoutBtn" hidden>ออกจากระบบ</button>
+        <button class="btn icon-only" type="button" id="sheUploadBtn" title="อัปโหลด Excel SHE" aria-label="อัปโหลด Excel SHE">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
         <span class="she-upload-msg" id="sheUploadMsg"></span>
       </div>
     </div>
     <div class="she-kpi-row" id="sheKpiRow" aria-label="SHE KPI from Excel">
-      <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiLti">&ndash;</span><span class="she-kpi-lbl">Days w/o LTI</span></div>
       <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiTri">&ndash;</span><span class="she-kpi-lbl">TRI YTD</span></div>
       <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiLtiYtd">&ndash;</span><span class="she-kpi-lbl">LTI YTD</span></div>
       <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiNear">&ndash;</span><span class="she-kpi-lbl">Near Miss YTD</span></div>
@@ -593,7 +591,7 @@
     </div>
   </section>
 
-  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.5.0 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
+  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.6.0 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
 </div>
 
 <div class="print-summary" id="printSummary">
