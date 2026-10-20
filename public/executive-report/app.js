@@ -711,11 +711,32 @@
 
       // 05: SHE
       var lti = data.ltiStatus;
+      var sheSum = data.sheSummary;
+      var sheKpiParts = [];
+      if (lti && lti.daysWithoutLti != null) sheKpiParts.push("Days w/o LTI " + lti.daysWithoutLti);
+      if (sheSum && sheSum.ytd) {
+        if (sheSum.ytd.LTI != null) sheKpiParts.push("LTI YTD " + sheSum.ytd.LTI);
+        if (sheSum.ytd.TRI != null) sheKpiParts.push("TRI YTD " + sheSum.ytd.TRI);
+        if (sheSum.ytd["Near Miss"] != null) sheKpiParts.push("Near Miss YTD " + sheSum.ytd["Near Miss"]);
+      }
+      var shePlantLines = [];
+      if (sheSum && sheSum.byPlant && sheSum.byPlant.length) {
+        sheSum.byPlant.forEach(function (p) {
+          var line = "<li><b>" + esc(p.plant) + "</b> &mdash; YTD " + (p.ytdCount || 0);
+          if (p.latestDetailShort && String(p.latestDetailShort).trim()) {
+            line += '<br><span class="ps-note">' + esc(String(p.latestDetailShort).trim()) + "</span>";
+          }
+          shePlantLines.push(line + "</li>");
+        });
+      }
       var sheRows = (data.sheIncidents || []).slice(0, 5).map(function (i) {
         return "<li>" + esc(i.title) + ' <span class="ps-pill ' + (i.status === "resolved" ? "good" : "warn") + '">' + esc(i.status) + "</span></li>";
       });
+      if (!sheRows.length && shePlantLines.length) sheRows = shePlantLines;
       blocks.push(
-        '<div class="ps-block"><div class="ps-block-title">05 &middot; SHE' + (lti && lti.daysWithoutLti != null ? " &mdash; " + lti.daysWithoutLti + " days without LTI" : "") + '</div><ul class="ps-list">' +
+        '<div class="ps-block"><div class="ps-block-title">05 &middot; SHE' +
+        (sheKpiParts.length ? " &mdash; " + esc(sheKpiParts.join(" · ")) : (lti && lti.daysWithoutLti != null ? " &mdash; " + lti.daysWithoutLti + " days without LTI" : "")) +
+        '</div><ul class="ps-list">' +
         (sheRows.length ? sheRows.join("") : '<li class="ps-empty">No SHE items today</li>') + "</ul></div>"
       );
 
@@ -985,15 +1006,69 @@
     var sheKpiTri = document.getElementById("sheKpiTri");
     var sheKpiLtiYtd = document.getElementById("sheKpiLtiYtd");
     var sheKpiNear = document.getElementById("sheKpiNear");
-    var sheKpiPd = document.getElementById("sheKpiPd");
     var sheChartWrap = document.getElementById("sheChartWrap");
     var sheMonthlyChart = document.getElementById("sheMonthlyChart");
     var shePlantChips = document.getElementById("shePlantChips");
     var sheLatestWrap = document.getElementById("sheLatestWrap");
     var sheLatestList = document.getElementById("sheLatestList");
+    var shePlantCards = document.getElementById("shePlantCards");
 
-    var SHE_KPI_KEYS = ["TRI", "LTI", "First Aid", "Near Miss", "PD"];
+    var SHE_CARD_PLANTS = [
+      {
+        code: "RMD7",
+        tier: "tier-blue",
+        full: "Rolling Mill 7",
+        icon: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="9" cy="12" r="5.2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="12" r="5.2"/><circle cx="16" cy="12" r="2"/></svg>'
+      },
+      {
+        code: "RMD8",
+        tier: "tier-green",
+        full: "Rolling Mill 8",
+        icon: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="9" cy="12" r="5.2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="12" r="5.2"/><circle cx="16" cy="12" r="2"/></svg>'
+      },
+      {
+        code: "MSM",
+        tier: "tier-orange",
+        full: "Steel Melting",
+        icon: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>'
+      }
+    ];
     var TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "ม.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+    function sheDaysSince(dateIso, asOfIso) {
+      var p = function (iso) {
+        var parts = iso.slice(0, 10).split("-");
+        return Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      };
+      return Math.floor((p(asOfIso) - p(dateIso)) / 86400000);
+    }
+
+    // Dot/days logic must stay in sync with src/lib/services/sheStatus.ts
+    function shePlantDotStatus(row, asOfIso) {
+      if (!row) return "gray";
+      if (row.lastLtiTriDate && (row.lastLtiTriCategory === "LTI" || row.lastLtiTriCategory === "TRI")) {
+        if (sheDaysSince(row.lastLtiTriDate, asOfIso) <= 30) return "red";
+      }
+      if (row.lastInjuryDate && (row.lastInjuryCategory === "LTI" || row.lastInjuryCategory === "TRI" || row.lastInjuryCategory === "First Aid")) {
+        if (sheDaysSince(row.lastInjuryDate, asOfIso) <= 30) return "yellow";
+      }
+      return "green";
+    }
+
+    function sheDotLabel(status) {
+      if (status === "gray") return "ไม่มีข้อมูล";
+      if (status === "red") return "สถานะ: มี LTI หรือ TRI ภายใน 30 วัน";
+      if (status === "yellow") return "สถานะ: มีเหตุบาดเจ็บ (First Aid) ภายใน 30 วัน";
+      return "สถานะ: ไม่มีเหตุบาดเจ็บภายใน 30 วัน";
+    }
+
+    function fmtThaiShortDate(iso) {
+      if (!iso) return "–";
+      var parts = iso.slice(0, 10).split("-");
+      var d = Number(parts[2]);
+      var m = TH_MONTHS[Number(parts[1]) - 1] || parts[1];
+      return (d < 10 ? "0" + d : String(d)) + " " + m;
+    }
 
     function normalizeSheUploadEmpCode(raw) {
       if (!raw) return "";
@@ -1031,81 +1106,105 @@
       return String(map[key]);
     }
 
-    function segClass(cat) {
-      if (cat === "TRI") return "tri";
-      if (cat === "LTI") return "lti";
-      if (cat === "First Aid") return "fa";
-      if (cat === "Near Miss") return "nm";
-      return "pd";
+    function sheMetaTitle(summary) {
+      if (!summary || !summary.lastImportedAt) return "";
+      var through = summary.dataThroughDate || "–";
+      var imported = summary.lastImportedAt ? fmtDateTime(summary.lastImportedAt) : "–";
+      var t = "คำนวณจาก Excel SHE · ถึง " + through + " · import " + imported;
+      if (summary.lastImportedBy) t += " · อัปเดตล่าสุดโดย " + summary.lastImportedBy;
+      return t;
+    }
+
+    function renderShePlantCards(summary) {
+      if (!shePlantCards) return;
+      var asOf = summary.asOfDate || REPORT_DATE;
+      var byPlantMap = {};
+      var byPlantLoaded = Array.isArray(summary.byPlant) && summary.byPlant.length > 0;
+      (summary.byPlant || []).forEach(function (row) { byPlantMap[row.plant] = row; });
+      shePlantCards.innerHTML = SHE_CARD_PLANTS.map(function (def) {
+        var row = byPlantLoaded ? byPlantMap[def.code] : null;
+        var dot = shePlantDotStatus(row, asOf);
+        var daysLine;
+        var ytdLine;
+        var latestLine;
+        var detailLine = "";
+        if (!row) {
+          daysLine = "ไม่มีข้อมูล";
+          ytdLine = "ไม่มีข้อมูล";
+          latestLine = "ไม่มีข้อมูล";
+        } else {
+          if (!row.lastInjuryDate) {
+            daysLine = "– วัน ไม่มีเหตุ";
+          } else {
+            var ds = sheDaysSince(row.lastInjuryDate, asOf);
+            daysLine = ds + " วัน ไม่มีเหตุ";
+          }
+          ytdLine = row.ytdCount > 0 ? ("YTD " + row.ytdCount + " ครั้ง") : "ไม่มีเหตุปีนี้";
+          latestLine = row.latestDate
+            ? ("ล่าสุด " + fmtThaiShortDate(row.latestDate) + " · " + escapeHtml(row.latestCategory || "–"))
+            : "ล่าสุด –";
+          if (row.latestDetailShort) {
+            var detailText = String(row.latestDetailShort).trim();
+            if (detailText) {
+              detailLine =
+                '<div class="stat-note she-plant-latest-detail" title="' + escapeHtml(detailText) + '">' +
+                escapeHtml(detailText) + "</div>";
+            }
+          }
+        }
+        var tip = row ? ("PD YTD: " + (row.pdYtdCount || 0)) : "";
+        return (
+          '<article class="plant-panel" data-she-plant="' + escapeHtml(def.code) + '"' + (tip ? (' title="' + escapeHtml(tip) + '"') : "") + '>' +
+          '<div class="pp-header ' + def.tier + '">' +
+          '<span class="pp-icon">' + def.icon + '</span>' +
+          '<div class="pp-titles">' +
+          '<div class="pp-code">' + escapeHtml(def.code) + '</div>' +
+          '<div class="pp-full">' + escapeHtml(def.full) + '</div>' +
+          '</div>' +
+          '<span class="she-status-dot ' + dot + '" role="img" aria-label="' + escapeHtml(sheDotLabel(dot)) + '" title="' + escapeHtml(sheDotLabel(dot)) + '"></span>' +
+          '</div>' +
+          '<div class="pp-body she-plant-metrics">' +
+          '<div class="stat-value">' + escapeHtml(daysLine) + '</div>' +
+          '<div class="stat-note">' + escapeHtml(ytdLine) + '</div>' +
+          '<div class="stat-note">' + latestLine + '</div>' +
+          detailLine +
+          '</div></article>'
+        );
+      }).join("");
     }
 
     function renderSheSummary(summary) {
       hasSheExcel = !!(summary && summary.lastImportedAt);
       updateManualSheUi();
+      window.__zbPrintData = window.__zbPrintData || {};
+      window.__zbPrintData.sheSummary = summary || null;
+
       if (!summary || !summary.lastImportedAt) {
         sheSourceBadge.textContent = "Source: SHE Excel · ยังไม่มีข้อมูล";
         sheChartWrap.hidden = true;
         sheLatestWrap.hidden = true;
-        if (sheKpiLti) sheKpiLti.textContent = "–";
-        sheKpiTri.textContent = sheKpiLtiYtd.textContent = sheKpiNear.textContent = sheKpiPd.textContent = "–";
+        if (sheKpiLti) sheKpiLti.innerHTML = "– <span class=\"unit\">วัน</span>";
+        sheKpiTri.textContent = sheKpiLtiYtd.textContent = sheKpiNear.textContent = "–";
+        if (shePlantCards) shePlantCards.innerHTML = "";
         return;
       }
-      var through = summary.dataThroughDate || "–";
-      var imported = summary.lastImportedAt ? fmtDateTime(summary.lastImportedAt) : "–";
-      var badge = "Source: SHE Excel · ถึง " + through + " · import " + imported;
-      if (summary.lastImportedBy) {
-        badge += " · upload โดย " + summary.lastImportedBy + " เมื่อ " + imported;
-      }
-      sheSourceBadge.textContent = badge;
-      sheKpiTri.textContent = fmtCount(summary.ytd, "TRI");
+      sheSourceBadge.textContent = sheMetaTitle(summary);
+      var metaTitle = sheMetaTitle(summary);
       sheKpiLtiYtd.textContent = fmtCount(summary.ytd, "LTI");
+      sheKpiTri.textContent = fmtCount(summary.ytd, "TRI");
       sheKpiNear.textContent = fmtCount(summary.ytd, "Near Miss");
-      sheKpiPd.textContent = fmtCount(summary.ytd, "PD");
-
-      var year = Number(REPORT_DATE.slice(0, 4));
-      var endMonth = Number(REPORT_DATE.slice(5, 7));
-      var byMonth = {};
-      (summary.byMonthYtd || []).forEach(function (row) {
-        if (!byMonth[row.month]) byMonth[row.month] = {};
-        byMonth[row.month][row.category] = row.count;
+      if (sheKpiLtiChip) sheKpiLtiChip.title = metaTitle;
+      [sheKpiLtiYtd, sheKpiTri, sheKpiNear].forEach(function (el) {
+        if (el && el.closest(".stat-tile")) el.closest(".stat-tile").title = metaTitle;
       });
-      var maxTotal = 0;
-      for (var m = 1; m <= endMonth; m += 1) {
-        var t = 0;
-        SHE_KPI_KEYS.forEach(function (k) { t += (byMonth[m] && byMonth[m][k]) || 0; });
-        if (t > maxTotal) maxTotal = t;
-      }
-      var chartHtml = "";
-      for (var mo = 1; mo <= endMonth; mo += 1) {
-        var monthTotal = 0;
-        var segs = "";
-        SHE_KPI_KEYS.forEach(function (k) {
-          var c = (byMonth[mo] && byMonth[mo][k]) || 0;
-          monthTotal += c;
-          if (c > 0) {
-            var h = maxTotal ? Math.max(4, Math.round((c / maxTotal) * 100)) : 4;
-            segs += '<div class="she-chart-seg ' + segClass(k) + '" style="height:' + h + 'px" title="' + escapeHtml(k) + ": " + c + '"></div>';
-          }
-        });
-        chartHtml += '<div class="she-chart-col"><div class="she-chart-stack">' + (segs || '<div class="she-chart-seg" style="height:2px;opacity:0.2"></div>') + '</div><span class="she-chart-lbl">' + TH_MONTHS[mo - 1] + (monthTotal ? " (" + monthTotal + ")" : "") + "</span></div>";
-      }
-      sheMonthlyChart.innerHTML = chartHtml;
-      sheChartWrap.hidden = !chartHtml;
 
-      shePlantChips.innerHTML = (summary.byPlantYtd || []).map(function (p) {
-        return '<span class="she-plant-chip">' + escapeHtml(p.plant) + ": " + p.count + "</span>";
-      }).join("");
+      sheChartWrap.hidden = true;
+      sheLatestWrap.hidden = true;
+      if (sheMonthlyChart) sheMonthlyChart.innerHTML = "";
+      if (shePlantChips) shePlantChips.innerHTML = "";
+      if (sheLatestList) sheLatestList.innerHTML = "";
 
-      var latest = summary.latestIncidents || [];
-      sheLatestList.innerHTML = latest.length
-        ? latest.map(function (row) {
-          return "<li><b>" + escapeHtml(row.occurredDate) + "</b> · " + escapeHtml(row.plant) + " · " + escapeHtml(row.category) +
-            (row.severity ? " · " + escapeHtml(row.severity) : "") +
-            (row.detailShort ? '<span class="she-latest-detail">' + escapeHtml(row.detailShort) + "</span>" : "") +
-            "</li>";
-        }).join("")
-        : '<li class="she-empty">ไม่มีเหตุการณ์</li>';
-      sheLatestWrap.hidden = false;
+      renderShePlantCards(summary);
     }
 
     function loadSheSummary() {
@@ -1207,7 +1306,9 @@
       lastLtiDate = status.lastLtiDate;
       var daysText = status.daysWithoutLti == null ? "–" : status.daysWithoutLti;
       ltiValueEl.textContent = daysText;
-      if (sheKpiLti) sheKpiLti.textContent = daysText;
+      if (sheKpiLti) {
+        sheKpiLti.innerHTML = escapeHtml(String(daysText)) + ' <span class="unit">วัน</span>';
+      }
       if (sheKpiLtiChip) sheKpiLtiChip.title = ltiMetaPlainText(status);
       ltiDateInput.value = status.lastLtiDate || "";
       var ltiFromExcel = status && status.source === "excel";

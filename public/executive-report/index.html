@@ -505,30 +505,40 @@
         Add
       </button>
     </div>
-    <div class="she-xls-head">
+    <div class="she-xls-head" hidden>
       <span class="she-source-badge" id="sheSourceBadge">Source: SHE Excel</span>
     </div>
     <div class="she-kpi-row" id="sheKpiRow" aria-label="SHE KPI from Excel">
-      <div class="she-kpi-chip" id="sheKpiLtiChip">
-        <div class="she-kpi-chip-head">
-          <span class="she-kpi-val" id="sheKpiLti">&ndash;</span>
-          <button class="she-kpi-history-btn h-history-btn" type="button" id="sheKpiLtiHistoryBtn" title="History" aria-label="View LTI history">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <div class="stat-tile" id="sheKpiLtiChip">
+        <div class="stat-label">Days w/o LTI</div>
+        <div class="she-lti-hero-row">
+          <div class="stat-value" id="sheKpiLti">&ndash; <span class="unit">วัน</span></div>
+          <button class="she-lti-history-btn h-history-btn" type="button" id="sheKpiLtiHistoryBtn" title="History" aria-label="View LTI history">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
           </button>
         </div>
-        <span class="she-kpi-lbl">Days w/o LTI</span>
       </div>
-      <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiTri">&ndash;</span><span class="she-kpi-lbl">TRI YTD</span></div>
-      <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiLtiYtd">&ndash;</span><span class="she-kpi-lbl">LTI YTD</span></div>
-      <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiNear">&ndash;</span><span class="she-kpi-lbl">Near Miss YTD</span></div>
-      <div class="she-kpi-chip"><span class="she-kpi-val" id="sheKpiPd">&ndash;</span><span class="she-kpi-lbl">PD YTD</span></div>
+      <div class="stat-tile">
+        <div class="stat-label">LTI YTD</div>
+        <div class="stat-value" id="sheKpiLtiYtd">&ndash;</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">TRI YTD</div>
+        <div class="stat-value" id="sheKpiTri">&ndash;</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Near Miss YTD</div>
+        <div class="stat-value" id="sheKpiNear">&ndash;</div>
+      </div>
+      <span id="sheKpiPd" hidden aria-hidden="true"></span>
     </div>
+    <div class="plant-panels" id="shePlantCards" aria-label="SHE by plant"></div>
     <div class="she-chart-wrap card" id="sheChartWrap" hidden>
       <div class="she-chart-title">เหตุการณ์รายเดือน (YTD) · แยกประเภท</div>
       <div class="she-chart" id="sheMonthlyChart"></div>
       <div class="she-plant-chips" id="shePlantChips"></div>
     </div>
-    <div class="she-latest card" id="sheLatestWrap" hidden>
+    <div class="she-latest card" id="sheLatestWrap" hidden aria-hidden="true">
       <div class="she-latest-title">เหตุการณ์ล่าสุดจาก Excel</div>
       <ul class="she-latest-list" id="sheLatestList"></ul>
     </div>
@@ -600,7 +610,7 @@
     </div>
   </section>
 
-  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.6.1 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
+  <div class="foot-note">ZUBBSTEEL Production Systems &middot; v0.7.0 &middot; Production/Downtime/Highlight/SHE are live data; PM/Quality/Equipment are Coming soon (ตัวอย่างข้อมูล) &middot; Generated <span class="zb-today-date">16 September 2026</span></div>
 </div>
 
 <div class="print-summary" id="printSummary">

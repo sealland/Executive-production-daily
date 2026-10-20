@@ -62,6 +62,19 @@ export interface SheMonthCategoryCount {
   count: number;
 }
 
+export interface ShePlantSummary {
+  plant: string;
+  ytdCount: number;
+  pdYtdCount: number;
+  lastInjuryDate: string | null;
+  lastInjuryCategory: string | null;
+  lastLtiTriDate: string | null;
+  lastLtiTriCategory: string | null;
+  latestDate: string | null;
+  latestCategory: string | null;
+  latestDetailShort: string | null;
+}
+
 export interface SheSummaryResponse {
   asOfDate: string;
   lastImportedAt: string | null;
@@ -71,6 +84,7 @@ export interface SheSummaryResponse {
   mtd: Record<string, number>;
   day: Record<string, number>;
   byPlantYtd: ShePlantCount[];
+  byPlant: ShePlantSummary[];
   byMonthYtd: SheMonthCategoryCount[];
   latestIncidents: SheSummaryIncident[];
 }
