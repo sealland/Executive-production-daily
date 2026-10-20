@@ -979,6 +979,9 @@
     var sheUploadMsg = document.getElementById("sheUploadMsg");
     var sheUploadEmpCode = normalizeSheUploadEmpCode(new URLSearchParams(window.location.search).get("currentUser"));
     var hasSheExcel = false;
+    var sheKpiLti = document.getElementById("sheKpiLti");
+    var sheKpiLtiChip = document.getElementById("sheKpiLtiChip");
+    var sheKpiLtiHistoryBtn = document.getElementById("sheKpiLtiHistoryBtn");
     var sheKpiTri = document.getElementById("sheKpiTri");
     var sheKpiLtiYtd = document.getElementById("sheKpiLtiYtd");
     var sheKpiNear = document.getElementById("sheKpiNear");
@@ -1001,14 +1004,11 @@
 
     function updateManualSheUi() {
       var list = document.getElementById("sheList");
-      var addBtn = document.getElementById("sheAddBtn");
       if (hasSheExcel) {
         if (list) list.hidden = true;
-        if (addBtn) addBtn.hidden = true;
         return;
       }
       if (list) list.hidden = false;
-      if (addBtn) addBtn.hidden = !currentUser;
     }
 
     function refreshSheUploadVisibility() {
@@ -1046,6 +1046,7 @@
         sheSourceBadge.textContent = "Source: SHE Excel · ยังไม่มีข้อมูล";
         sheChartWrap.hidden = true;
         sheLatestWrap.hidden = true;
+        if (sheKpiLti) sheKpiLti.textContent = "–";
         sheKpiTri.textContent = sheKpiLtiYtd.textContent = sheKpiNear.textContent = sheKpiPd.textContent = "–";
         return;
       }
@@ -1177,18 +1178,27 @@
     var sheList = document.getElementById("sheList");
     var lastLtiDate = null;
 
-    function renderLtiMeta(status) {
+    function ltiMetaPlainText(status) {
       if (status && status.source === "excel") {
-        ltiMetaEl.textContent = "คำนวณจาก Excel SHE" + (status.updatedAt ? " · import " + fmtDateTime(status.updatedAt) : "");
-        return;
+        return "คำนวณจาก Excel SHE" + (status.updatedAt ? " · import " + fmtDateTime(status.updatedAt) : "");
       }
       if (!status || !status.updatedBy) {
-        ltiMetaEl.textContent = "ยังไม่มีการบันทึกจากระบบ";
+        return "ยังไม่มีการบันทึกจากระบบ";
+      }
+      return "อัปเดตล่าสุดโดย " + status.updatedBy.name +
+        (status.updatedBy.position ? " (" + status.updatedBy.position + ")" : "") +
+        " · " + fmtDateTime(status.updatedAt);
+    }
+
+    function renderLtiMeta(status) {
+      var plain = ltiMetaPlainText(status);
+      if (status && status.source !== "excel" && status.updatedBy) {
+        ltiMetaEl.innerHTML = "อัปเดตล่าสุดโดย <span class=\"h-meta-name\">" + escapeHtml(status.updatedBy.name) + "</span>" +
+          (status.updatedBy.position ? " (" + escapeHtml(status.updatedBy.position) + ")" : "") +
+          " &middot; " + escapeHtml(fmtDateTime(status.updatedAt));
         return;
       }
-      ltiMetaEl.innerHTML = "อัปเดตล่าสุดโดย <span class=\"h-meta-name\">" + escapeHtml(status.updatedBy.name) + "</span>" +
-        (status.updatedBy.position ? " (" + escapeHtml(status.updatedBy.position) + ")" : "") +
-        " &middot; " + escapeHtml(fmtDateTime(status.updatedAt));
+      ltiMetaEl.textContent = plain;
     }
 
     function applyLtiStatus(status) {
@@ -1197,6 +1207,8 @@
       lastLtiDate = status.lastLtiDate;
       var daysText = status.daysWithoutLti == null ? "–" : status.daysWithoutLti;
       ltiValueEl.textContent = daysText;
+      if (sheKpiLti) sheKpiLti.textContent = daysText;
+      if (sheKpiLtiChip) sheKpiLtiChip.title = ltiMetaPlainText(status);
       ltiDateInput.value = status.lastLtiDate || "";
       var ltiFromExcel = status && status.source === "excel";
       ltiDateInput.hidden = ltiFromExcel;
@@ -1241,14 +1253,16 @@
         });
     });
 
-    ltiHistoryBtn.addEventListener("click", function () {
+    function openLtiHistory() {
       ZB.openHistory("LTI History", "Days without LTI · edit log", "/api/she/lti/history", function (row) {
         return '<div class="hl-history-item">' +
           '<div class="hl-history-head"><span>' + escapeHtml(row.editedBy.name) + (row.editedBy.position ? ' (' + escapeHtml(row.editedBy.position) + ')' : '') + '</span><span>' + escapeHtml(fmtDateTime(row.editedAt)) + '</span></div>' +
           '<div class="hl-history-text">Last LTI date set to ' + escapeHtml(row.lastLtiDate) + '</div>' +
           '</div>';
       });
-    });
+    }
+    ltiHistoryBtn.addEventListener("click", openLtiHistory);
+    if (sheKpiLtiHistoryBtn) sheKpiLtiHistoryBtn.addEventListener("click", openLtiHistory);
 
     // ---- Incidents ----
     var incidents = [];

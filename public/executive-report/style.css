@@ -458,13 +458,17 @@
   table.rpt th.num { text-align: right; }
 
   /* ---- Section 4: SHE ---- */
-  .she-xls-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .she-xls-head { margin-bottom: 12px; }
+  .block-head .she-upload-row { flex-wrap: wrap; justify-content: flex-end; }
   .she-source-badge { font-size: 12px; font-weight: 600; color: var(--success); background: var(--success-bg); padding: 4px 10px; border-radius: 999px; }
   .she-upload-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .she-upload-msg { font-size: 12.5px; color: var(--ink-secondary); }
   .she-upload-msg.err { color: var(--danger); }
   .she-kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
   .she-kpi-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+  .she-kpi-chip-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .she-kpi-chip-head .she-kpi-val { flex: 1; min-width: 0; }
+  .she-kpi-history-btn { flex: none; width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
   .she-kpi-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
   .she-kpi-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-secondary); }
   .she-chart-wrap { padding: 14px 16px; margin-bottom: 14px; }
@@ -488,7 +492,7 @@
   @media print {
     .she-xls-head, .she-kpi-row, .she-chart-wrap, .she-latest, .she-latest-detail { display: none !important; }
   }
-  .she-top { display: grid; grid-template-columns: 1fr 2.2fr; gap: 14px; }
+  .she-top { display: grid; grid-template-columns: 1fr; gap: 14px; }
   .lti-card { padding: 18px 20px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; background: linear-gradient(160deg, var(--success-bg), var(--surface)); }
   .lti-value { font-size: 38px; font-weight: 800; color: var(--success); font-variant-numeric: tabular-nums; }
   .lti-label { font-size: 13.5px; font-weight: 700; color: var(--ink-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -726,11 +730,7 @@
     table.rpt { font-size: 9.5px; }
     table.rpt th { padding: 0 8px 5px; font-size: 8.5px; }
     table.rpt td { padding: 5px 8px; }
-    .she-top { grid-template-columns: 1fr 2.2fr !important; gap: 8px; }
-    .lti-card { padding: 8px 10px; }
-    .lti-value { font-size: 22px; }
-    .lti-label { font-size: 9px; }
-    .lti-sub { font-size: 8.5px; }
+    .she-top { grid-template-columns: 1fr !important; gap: 8px; }
     .she-list { gap: 6px; }
     .she-item { padding: 7px 9px; gap: 8px; }
     .she-icon { width: 22px; height: 22px; }
