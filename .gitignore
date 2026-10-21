@@ -45,3 +45,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# /team workflow notes (internal, not for the repo)
+/.team/
+/TASKS.md
