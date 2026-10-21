@@ -22,10 +22,11 @@ Source field: `eng_name` (example: `Miss Jutamat  Siwakun`).
 Rules:
 
 1. Trim and collapse repeated whitespace.
-2. Drop a leading English title if present: `Miss`, `Mrs`, `Mr`, `Ms`, `Dr` (case-insensitive).
+2. Drop a leading English title if present: `Miss`, `Mrs`, `Mr`, `Ms`, `Dr` (case-insensitive; optional trailing `.` on the title token; title may be glued to the given name with no space, e.g. `Mr.Sirichai`). Also drop leading Thai titles `นาย`, `นาง`, `นางสาว` when they appear as their own token.
 3. Remaining tokens = given name + family name (and any middle tokens).
-4. Output: `{GivenName}.{firstLetterOfLastName}` lowercasing only the last-name initial; given name keeps original casing from the source after title strip.
-   - `Miss Jutamat  Siwakun` → `Jutamat.s`
+4. Output: `{givenName}.{firstLetterOfLastName}` — **all lowercase** (given name and last-name initial).
+   - `Miss Jutamat  Siwakun` → `jutamat.s`
+   - `MR. SIRICHAI  CHAYMANEE` → `sirichai.c`
    - If only one name token remains after title strip → use that token alone (no `.x`).
    - If `eng_name` empty/null → fall back to existing display name sanitised the same way if possible; otherwise skip access log (still return employee if code matches).
 
