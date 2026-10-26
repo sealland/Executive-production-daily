@@ -1,4 +1,4 @@
-# SHE Excel import — deploy (v0.7.2)
+# SHE Excel import — deploy (v0.7.3)
 
 เป้าหมาย: เปิดอัปโหลด Excel SHE บน production (CEO_REPORT) อย่างปลอดภัย หลังรัน DDL และตั้ง env
 
@@ -22,7 +22,7 @@
    - `SHE_UPLOAD_EMPCODES` — รหัสพนักงานที่อนุญาตอัปโหลด คั่นด้วย comma (ว่าง = ปฏิเสธทุกคน); เป็นทั้ง allowlist สำหรับ eligibility และ import
    - **Traefik (จำเป็น):** Traefik ต้อง **เขียนทับ/append** header `X-Forwarded-For` ด้วย IP ของ client จริงเสมอ (แอปใช้ entry ขวาสุดสำหรับ rate limit — entry ซ้ายสุดปลอมได้) และตั้ง `X-Forwarded-Proto` กับ `X-Forwarded-Host` ให้ตรงกับ URL ที่ผู้ใช้เปิด (การตรวจ Origin ของ import ขึ้นกับสอง header นี้; ไม่ตรง = 403 ทุกครั้ง). ห้ามให้ client ส่ง header เหล่านี้เข้ามาตรง ๆ โดย Traefik ไม่แก้ค่า
    - Rate limit: 5 ครั้ง/นาที ต่อ IP และต่อรหัสพนักงาน (in-memory, แต่ละ process แยกกัน) — ใช้กับ eligibility และ auth PIN (ถ้ายังเปิดใช้)
-4. **Deploy** — build และ deploy แอป v0.7.2 ด้วย `npm ci` (ใช้ package-lock.json จาก repo นี้ — next 16.4.2 / sharp 0.35.5 ตาม lock). **Build/CI ไม่ต้องออก internet ไป cdn.sheetjs.com** — ใช้ `vendor/xlsx-0.20.3.tgz`
+4. **Deploy** — build และ deploy แอป v0.7.3 ด้วย `npm ci` (ใช้ package-lock.json จาก repo นี้ — next 16.4.2 / sharp 0.35.5 ตาม lock). **Build/CI ไม่ต้องออก internet ไป cdn.sheetjs.com** — ใช้ `vendor/xlsx-0.20.3.tgz`. **Node 22.23.4** บน production (ติดตั้งโดย infra; ดู `.nvmrc` ใน repo)
    - `tsx` ใช้เฉพาะ `npm test` และ CLI import (`npm run she:import`) ไม่จำเป็นสำหรับ runtime ของ web app
 
 ### Access log (optional — Executive Report)

@@ -4,6 +4,8 @@ Dashboard สำหรับผู้บริหาร ติดตาม Produ
 
 ## Quick start
 
+ใช้ Node **22.23.4** (ดู `.nvmrc`).
+
 1. ตั้งค่า `.env` (มีตัวอย่างใน `.env.example`)
 2. `npm install`
 3. `npm run dev`
